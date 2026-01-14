@@ -12,14 +12,15 @@ func NewRouter(d *db.DB, orch *orchestrator.Orchestrator) http.Handler {
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/devices", func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == "GET" {
+		switch r.Method {
+		case "GET":
 			devs, err := d.GetDevices()
 			if err != nil {
 				http.Error(w, err.Error(), 500)
 				return
 			}
-			json.NewEncoder(w).Encode(devs)
-		} else if r.Method == "POST" {
+			_ = json.NewEncoder(w).Encode(devs)
+		case "POST":
 			var dev db.Device
 			if err := json.NewDecoder(r.Body).Decode(&dev); err != nil {
 				http.Error(w, err.Error(), 400)
@@ -36,7 +37,7 @@ func NewRouter(d *db.DB, orch *orchestrator.Orchestrator) http.Handler {
 	mux.HandleFunc("/test/speed", func(w http.ResponseWriter, r *http.Request) {
 		// Trigger a speed test manually
 		// Query params: source_id, target_id
-		w.Write([]byte(`{"status": "not implemented"}`))
+		_, _ = w.Write([]byte(`{"status": "not implemented"}`))
 	})
 
 	return mux

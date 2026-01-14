@@ -18,7 +18,7 @@ RUN npm run build
 # Default 'create-svelte' output for static is 'build'.
 
 # Stage 2: Build Worker
-FROM golang:1.24-alpine AS worker-builder
+FROM golang:1.23-alpine AS worker-builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -28,7 +28,7 @@ COPY internal ./internal
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /worker ./cmd/worker
 
 # Stage 3: Build Server
-FROM golang:1.24-alpine AS server-builder
+FROM golang:1.23-alpine AS server-builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download

@@ -34,10 +34,11 @@ func ConnectSSH(user, host string, port int, authMethods []ssh.AuthMethod) (*SSH
 	return &SSHClient{client: client}, nil
 }
 
-func (s *SSHClient) Close() {
+func (s *SSHClient) Close() error {
 	if s.client != nil {
-		s.client.Close()
+		return s.client.Close()
 	}
+	return nil
 }
 
 // CopyFile copies a local file to the remote destination.
@@ -46,7 +47,7 @@ func (s *SSHClient) CopyFile(localPath, remotePath string, mode os.FileMode) err
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 
 	stat, err := f.Stat()
 	if err != nil {
@@ -59,7 +60,7 @@ func (s *SSHClient) CopyFile(localPath, remotePath string, mode os.FileMode) err
 	if err != nil {
 		return err
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	// SCP protocol details are tricky to implement manually via stdin.
 	// A simpler approach is 'cat > remotePath' if the file is small enough,
@@ -70,9 +71,12 @@ func (s *SSHClient) CopyFile(localPath, remotePath string, mode os.FileMode) err
 	// We also chmod it afterwards.
 
 	go func() {
-		w, _ := session.StdinPipe()
-		defer w.Close()
-		io.Copy(w, f)
+		w, err := session.StdinPipe()
+		if err != nil {
+			return
+		}
+		defer func() { _ = w.Close() }()
+		_, _ = io.Copy(w, f)
 	}()
 
 	if err := session.Run(fmt.Sprintf("cat > %s", remotePath)); err != nil {
@@ -84,7 +88,7 @@ func (s *SSHClient) CopyFile(localPath, remotePath string, mode os.FileMode) err
 	if err != nil {
 		return err
 	}
-	defer session2.Close()
+	defer func() { _ = session2.Close() }()
 
 	if err := session2.Run(fmt.Sprintf("chmod %o %s", mode, remotePath)); err != nil {
 		return fmt.Errorf("failed to chmod: %w", err)
@@ -98,7 +102,7 @@ func (s *SSHClient) RunCommand(cmd string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer session.Close()
+	defer func() { _ = session.Close() }()
 
 	var b bytes.Buffer
 	session.Stdout = &b

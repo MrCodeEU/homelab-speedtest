@@ -25,14 +25,14 @@ func (o *Orchestrator) RunSpeedTest(source, target db.Device) (*WorkerResponse, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to source %s: %w", source.Name, err)
 	}
-	defer sourceClient.Close()
+	defer func() { _ = sourceClient.Close() }()
 
 	// 2. Connect to Target
 	targetClient, err := ConnectSSH(target.SSHUser, target.Hostname, target.SSHPort, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to target %s: %w", target.Name, err)
 	}
-	defer targetClient.Close()
+	defer func() { _ = targetClient.Close() }()
 
 	// 3. Deploy Worker
 	if err := o.deployWorker(sourceClient); err != nil {
@@ -51,7 +51,7 @@ func (o *Orchestrator) RunSpeedTest(source, target db.Device) (*WorkerResponse, 
 	// "nohup ... &" is safer.
 	go func() {
 		// This might block until cancelled or connection closed
-		targetClient.RunCommand(serverCmd)
+		_, _ = targetClient.RunCommand(serverCmd)
 	}()
 	time.Sleep(2 * time.Second) // Wait for server start
 
@@ -67,7 +67,7 @@ func (o *Orchestrator) RunSpeedTest(source, target db.Device) (*WorkerResponse, 
 
 	// 6. Cleanup (Kill server on target)
 	// We do this regardless of client success
-	go targetClient.RunCommand("pkill -f hl-speedtest-worker")
+	go func() { _, _ = targetClient.RunCommand("pkill -f hl-speedtest-worker") }()
 
 	if err != nil {
 		return nil, fmt.Errorf("client failed: %w, output: %s", err, output)
@@ -88,7 +88,7 @@ func (o *Orchestrator) RunPing(source, target db.Device) (*WorkerResponse, error
 	if err != nil {
 		return nil, err
 	}
-	defer client.Close()
+	defer func() { _ = client.Close() }()
 
 	if err := o.deployWorker(client); err != nil {
 		return nil, err

@@ -39,7 +39,7 @@ func (n *NtfyService) Send(title, message, priority string) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
 		return fmt.Errorf("ntfy returned status: %d", resp.StatusCode)

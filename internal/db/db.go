@@ -5,8 +5,9 @@ import (
 	_ "embed"
 	"fmt"
 
-	"github.com/user/homelab-speedtest/internal/config"
 	_ "modernc.org/sqlite"
+
+	"github.com/user/homelab-speedtest/internal/config"
 )
 
 //go:embed schema.sql
@@ -47,7 +48,7 @@ func (d *DB) GetDevices() ([]Device, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	var devices []Device
 	for rows.Next() {

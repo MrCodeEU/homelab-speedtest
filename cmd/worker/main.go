@@ -41,7 +41,7 @@ func runServer(port int) {
 		fmt.Fprintf(os.Stderr, "Error listening: %v\n", err)
 		os.Exit(1)
 	}
-	defer ln.Close()
+	defer func() { _ = ln.Close() }()
 	fmt.Printf("Listening on :%d\n", port)
 
 	for {
@@ -54,7 +54,7 @@ func runServer(port int) {
 }
 
 func handleConnection(conn net.Conn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	// Discard data
 	buf := make([]byte, 32*1024)
 	for {
@@ -75,12 +75,12 @@ func runClient(target string, resp *orchestrator.WorkerResponse) {
 		printJson(resp)
 		return
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Send data for 10 seconds (hardcoded for now, should be configurable)
 	duration := 10 * time.Second
 	deadline := start.Add(duration)
-	conn.SetDeadline(deadline)
+	_ = conn.SetDeadline(deadline)
 
 	buf := make([]byte, 32*1024) // 32KB chunks
 	var totalBytes int64
@@ -127,5 +127,5 @@ func runPing(target string, resp *orchestrator.WorkerResponse) {
 
 func printJson(v interface{}) {
 	enc := json.NewEncoder(os.Stdout)
-	enc.Encode(v)
+	_ = enc.Encode(v)
 }
