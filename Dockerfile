@@ -1,7 +1,7 @@
 # Stage 1: Build Frontend
 FROM node:20-alpine AS ui-builder
 WORKDIR /app/ui
-COPY ui/package*.json ./
+COPY ui/package*.json ui/svelte.config.js ui/vite.config.js ./
 RUN npm ci
 COPY ui/ .
 # Build SvelteKit app. output usually to build/
