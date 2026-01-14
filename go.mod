@@ -1,6 +1,6 @@
 module github.com/user/homelab-speedtest
 
-go 1.24.0
+go 1.25.5
 
 require (
 	golang.org/x/crypto v0.47.0
