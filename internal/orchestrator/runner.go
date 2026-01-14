@@ -35,10 +35,10 @@ func (o *Orchestrator) RunSpeedTest(source, target db.Device) (*WorkerResponse, 
 	defer func() { _ = targetClient.Close() }()
 
 	// 3. Deploy Worker
-	if err := o.deployWorker(sourceClient); err != nil {
+	if err = o.deployWorker(sourceClient); err != nil {
 		return nil, fmt.Errorf("failed to deploy worker to source: %w", err)
 	}
-	if err := o.deployWorker(targetClient); err != nil {
+	if err = o.deployWorker(targetClient); err != nil {
 		return nil, fmt.Errorf("failed to deploy worker to target: %w", err)
 	}
 
@@ -63,19 +63,19 @@ func (o *Orchestrator) RunSpeedTest(source, target db.Device) (*WorkerResponse, 
 	}
 
 	clientCmd := fmt.Sprintf("/tmp/hl-speedtest-worker -mode client -target %s:%d", targetAddr, serverPort)
-	output, err := sourceClient.RunCommand(clientCmd)
+	output, errClient := sourceClient.RunCommand(clientCmd)
 
 	// 6. Cleanup (Kill server on target)
 	// We do this regardless of client success
 	go func() { _, _ = targetClient.RunCommand("pkill -f hl-speedtest-worker") }()
 
-	if err != nil {
-		return nil, fmt.Errorf("client failed: %w, output: %s", err, output)
+	if errClient != nil {
+		return nil, fmt.Errorf("client failed: %w, output: %s", errClient, output)
 	}
 
 	// 7. Parse Result
 	var resp WorkerResponse
-	if err := json.Unmarshal([]byte(output), &resp); err != nil {
+	if err = json.Unmarshal([]byte(output), &resp); err != nil {
 		return nil, fmt.Errorf("failed to parse output: %w, raw: %s", err, output)
 	}
 
@@ -90,7 +90,7 @@ func (o *Orchestrator) RunPing(source, target db.Device) (*WorkerResponse, error
 	}
 	defer func() { _ = client.Close() }()
 
-	if err := o.deployWorker(client); err != nil {
+	if err = o.deployWorker(client); err != nil {
 		return nil, err
 	}
 
@@ -100,13 +100,13 @@ func (o *Orchestrator) RunPing(source, target db.Device) (*WorkerResponse, error
 	}
 
 	cmd := fmt.Sprintf("/tmp/hl-speedtest-worker -mode ping -target %s", targetAddr)
-	output, err := client.RunCommand(cmd)
-	if err != nil {
-		return nil, err
+	output, errPing := client.RunCommand(cmd)
+	if errPing != nil {
+		return nil, errPing
 	}
 
 	var resp WorkerResponse
-	if err := json.Unmarshal([]byte(output), &resp); err != nil {
+	if err = json.Unmarshal([]byte(output), &resp); err != nil {
 		return nil, err
 	}
 	return &resp, nil

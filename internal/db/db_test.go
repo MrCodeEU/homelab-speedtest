@@ -19,15 +19,14 @@ func TestNew(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 	cfg := config.DatabaseConfig{Path: dbPath}
 
-	db, err := New(cfg)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
+	db, errNew := New(cfg)
+	if errNew != nil {
+		t.Fatalf("Failed to create database: %v", errNew)
 	}
 	defer func() { _ = db.Close() }()
 
 	// Verify we can query
-	_, err = db.GetDevices()
-	if err != nil {
+	if _, err = db.GetDevices(); err != nil {
 		t.Fatalf("Failed to get devices: %v", err)
 	}
 }
@@ -42,9 +41,9 @@ func TestAddAndGetDevice(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 	cfg := config.DatabaseConfig{Path: dbPath}
 
-	db, err := New(cfg)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
+	db, errNew := New(cfg)
+	if errNew != nil {
+		t.Fatalf("Failed to create database: %v", errNew)
 	}
 	defer func() { _ = db.Close() }()
 
@@ -57,14 +56,14 @@ func TestAddAndGetDevice(t *testing.T) {
 		SSHPort:  22,
 	}
 
-	if err := db.AddDevice(dev); err != nil {
+	if err = db.AddDevice(dev); err != nil {
 		t.Fatalf("Failed to add device: %v", err)
 	}
 
 	// Get devices
-	devices, err := db.GetDevices()
-	if err != nil {
-		t.Fatalf("Failed to get devices: %v", err)
+	devices, errGet := db.GetDevices()
+	if errGet != nil {
+		t.Fatalf("Failed to get devices: %v", errGet)
 	}
 
 	if len(devices) != 1 {
@@ -90,9 +89,9 @@ func TestAddResult(t *testing.T) {
 	dbPath := filepath.Join(tmpDir, "test.db")
 	cfg := config.DatabaseConfig{Path: dbPath}
 
-	db, err := New(cfg)
-	if err != nil {
-		t.Fatalf("Failed to create database: %v", err)
+	db, errNew := New(cfg)
+	if errNew != nil {
+		t.Fatalf("Failed to create database: %v", errNew)
 	}
 	defer func() { _ = db.Close() }()
 
@@ -101,14 +100,14 @@ func TestAddResult(t *testing.T) {
 	_ = db.AddDevice(Device{Name: "Target", Hostname: "dst.local", SSHUser: "root", SSHPort: 22})
 
 	// Add a result
-	err = db.AddResult(1, 2, "ping", 0.5, 0.1, 0.0, 0)
-	if err != nil {
-		t.Fatalf("Failed to add result: %v", err)
+	errResult := db.AddResult(1, 2, "ping", 0.5, 0.1, 0.0, 0)
+	if errResult != nil {
+		t.Fatalf("Failed to add result: %v", errResult)
 	}
 
 	// Add speed result
-	err = db.AddResult(1, 2, "speed", 0, 0, 0, 950.5)
-	if err != nil {
-		t.Fatalf("Failed to add speed result: %v", err)
+	errSpeed := db.AddResult(1, 2, "speed", 0, 0, 0, 950.5)
+	if errSpeed != nil {
+		t.Fatalf("Failed to add speed result: %v", errSpeed)
 	}
 }

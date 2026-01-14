@@ -71,26 +71,26 @@ func (s *SSHClient) CopyFile(localPath, remotePath string, mode os.FileMode) err
 	// We also chmod it afterwards.
 
 	go func() {
-		w, err := session.StdinPipe()
-		if err != nil {
+		w, errInside := session.StdinPipe()
+		if errInside != nil {
 			return
 		}
 		defer func() { _ = w.Close() }()
 		_, _ = io.Copy(w, f)
 	}()
 
-	if err := session.Run(fmt.Sprintf("cat > %s", remotePath)); err != nil {
+	if err = session.Run(fmt.Sprintf("cat > %s", remotePath)); err != nil {
 		return fmt.Errorf("failed to copy file: %w", err)
 	}
 
 	// Chmod
-	session2, err := s.client.NewSession()
-	if err != nil {
-		return err
+	session2, err2 := s.client.NewSession()
+	if err2 != nil {
+		return err2
 	}
 	defer func() { _ = session2.Close() }()
 
-	if err := session2.Run(fmt.Sprintf("chmod %o %s", mode, remotePath)); err != nil {
+	if err = session2.Run(fmt.Sprintf("chmod %o %s", mode, remotePath)); err != nil {
 		return fmt.Errorf("failed to chmod: %w", err)
 	}
 
@@ -108,6 +108,8 @@ func (s *SSHClient) RunCommand(cmd string) (string, error) {
 	session.Stdout = &b
 	session.Stderr = &b // Combine stderr for debug
 
-	err = session.Run(cmd)
-	return b.String(), err
+	if err = session.Run(cmd); err != nil {
+		return b.String(), err
+	}
+	return b.String(), nil
 }

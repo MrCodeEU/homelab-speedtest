@@ -27,6 +27,16 @@ func TestWorkerResponseSerialization(t *testing.T) {
 		t.Error("Expected Success to be true")
 	}
 
+	if resp.LatencyMs != 0.5 {
+		t.Errorf("Expected LatencyMs 0.5, got %f", resp.LatencyMs)
+	}
+	if resp.JitterMs != 0.1 {
+		t.Errorf("Expected JitterMs 0.1, got %f", resp.JitterMs)
+	}
+	if resp.PacketLoss != 0.0 {
+		t.Errorf("Expected PacketLoss 0.0, got %f", resp.PacketLoss)
+	}
+
 	if resp.BandwidthMbps != 1000.0 {
 		t.Errorf("Expected BandwidthMbps 1000.0, got %f", resp.BandwidthMbps)
 	}
