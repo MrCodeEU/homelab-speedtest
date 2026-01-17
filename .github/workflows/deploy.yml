@@ -8,7 +8,6 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
 
 jobs:
   test:
@@ -60,10 +59,11 @@ jobs:
       - name: Determine Docker tag
         id: docker-tag
         run: |
+          IMAGE_NAME=$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')
           if [ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]; then
-            echo "tag=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest" >> $GITHUB_OUTPUT
+            echo "tag=${{ env.REGISTRY }}/${IMAGE_NAME}:latest" >> $GITHUB_OUTPUT
           else
-            echo "tag=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:dev" >> $GITHUB_OUTPUT
+            echo "tag=${{ env.REGISTRY }}/${IMAGE_NAME}:dev" >> $GITHUB_OUTPUT
           fi
 
       - name: Build and push Docker image
