@@ -99,7 +99,8 @@ func (o *Orchestrator) RunPing(source, target db.Device) (*WorkerResponse, error
 		targetAddr = target.IP
 	}
 
-	cmd := fmt.Sprintf("/tmp/hl-speedtest-worker -mode ping -target %s", targetAddr)
+	// Target the worker server port (8090) for TCP ping
+	cmd := fmt.Sprintf("/tmp/hl-speedtest-worker -mode ping -target %s:8090", targetAddr)
 	output, errPing := client.RunCommand(cmd)
 	if errPing != nil {
 		return nil, errPing

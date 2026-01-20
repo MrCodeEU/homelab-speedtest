@@ -8,6 +8,16 @@
  * @property {number} ssh_port
  */
 
+/**
+ * @typedef {Object} Result
+ * @property {number} source_id
+ * @property {number} target_id
+ * @property {string} type
+ * @property {number} latency_ms
+ * @property {number} bandwidth_mbps
+ * @property {string} timestamp
+ */
+
 const API_BASE = '/api';
 
 /**
@@ -17,6 +27,16 @@ const API_BASE = '/api';
 export async function getDevices() {
     const res = await fetch(`${API_BASE}/devices`);
     if (!res.ok) throw new Error('Failed to fetch devices');
+    return res.json();
+}
+
+/**
+ * Fetch latest results
+ * @returns {Promise<Result[]>}
+ */
+export async function getResults() {
+    const res = await fetch(`${API_BASE}/results/latest`);
+    if (!res.ok) throw new Error('Failed to fetch results');
     return res.json();
 }
 
