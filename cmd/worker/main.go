@@ -104,7 +104,7 @@ func runPing(target string, resp *orchestrator.WorkerResponse) {
 	// TCP Connect Ping
 	// We expect target to be "host:port". If just host, we default to 80 (or the server port if internal)
 	// But orchestrator should send host:port.
-	
+
 	start := time.Now()
 	conn, err := net.DialTimeout("tcp", target, 2*time.Second)
 	if err != nil {
@@ -114,7 +114,7 @@ func runPing(target string, resp *orchestrator.WorkerResponse) {
 		return
 	}
 	defer func() { _ = conn.Close() }()
-	
+
 	latency := time.Since(start).Seconds() * 1000 // ms
 	resp.LatencyMs = latency
 	resp.Success = true
