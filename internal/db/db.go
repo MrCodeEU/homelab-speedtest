@@ -74,3 +74,48 @@ func (d *DB) AddResult(sourceID, targetID int, type_ string, latency, jitter, lo
 		sourceID, targetID, type_, latency, jitter, loss, bandwidth)
 	return err
 }
+
+type Result struct {
+	SourceID      int     `json:"source_id"`
+	TargetID      int     `json:"target_id"`
+	Type          string  `json:"type"`
+	LatencyMs     float64 `json:"latency_ms"`
+	BandwidthMbps float64 `json:"bandwidth_mbps"`
+	Timestamp     string  `json:"timestamp"`
+}
+
+func (d *DB) GetLatestResults() ([]Result, error) {
+	query := `
+		SELECT 
+			r.source_device_id, 
+			r.target_device_id, 
+			r.type, 
+			IFNULL(r.latency_ms, 0), 
+			IFNULL(r.bandwidth_mbps, 0), 
+			r.timestamp 
+		FROM results r
+		INNER JOIN (
+			SELECT source_device_id, target_device_id, type, MAX(timestamp) as max_ts
+			FROM results
+			GROUP BY source_device_id, target_device_id, type
+		) latest ON r.source_device_id = latest.source_device_id 
+				AND r.target_device_id = latest.target_device_id 
+				AND r.type = latest.type 
+				AND r.timestamp = latest.max_ts
+	`
+	rows, err := d.Query(query)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	var results []Result
+	for rows.Next() {
+		var res Result
+		if err := rows.Scan(&res.SourceID, &res.TargetID, &res.Type, &res.LatencyMs, &res.BandwidthMbps, &res.Timestamp); err != nil {
+			return nil, err
+		}
+		results = append(results, res)
+	}
+	return results, nil
+}

@@ -101,27 +101,23 @@ func runClient(target string, resp *orchestrator.WorkerResponse) {
 }
 
 func runPing(target string, resp *orchestrator.WorkerResponse) {
-	// Implementing a simple ICMP ping requires root or special privs.
-	// For now, we can try a UDP ping or similar if possible, or exec 'ping'.
-	// Given the constraints, let's try to exec system ping for simplicity and reliability if the container supports it.
-	// But the user requested "speedtest must show accurate numbers and not rely on external tools but golang".
-	// However, Ping is usually expected to be ICMP. 'go-ping' library exists but needs privileges.
-	// I will implement a basic UDP ping-pong or just "TCP Connect" latency if Privileged ping is hard.
-	// Let's use TCP Connect latency for now as a fallback if we can't do ICMP easily without root.
-	// Wait, internal network "speedtest" implies ICMP for latency usually. I will try to use `fastping` or similar later.
-	// For this initial pass, let's use TCP Connect time as a proxy or just mark as "TODO: ICMP".
+	// TCP Connect Ping
+	// We expect target to be "host:port". If just host, we default to 80 (or the server port if internal)
+	// But orchestrator should send host:port.
 
-	// Actually, let's just do a TCP dial to the port if provided, OR just assume target is just IP.
-	// If target is just IP, we can't TCP dial without port.
-	// Let's rely on an external pinger library or 'ping' command if allowed.
-	// User said "speedtest must ... not rely on external tools". Ping is separate from speedtest in req 6.
-	// "Pings for latency ... must be seperatlly configurable".
-	// I'll stick to a simple TCP connect latency measurement for now if I can't use ICMP.
-	// Or I can use a library `github.com/prometheus/procfs` etc? No.
-	// `github.com/go-ping/ping` is standard. I'll add it to go.mod.
+	start := time.Now()
+	conn, err := net.DialTimeout("tcp", target, 2*time.Second)
+	if err != nil {
+		resp.Success = false
+		resp.Error = err.Error()
+		printJson(resp)
+		return
+	}
+	defer func() { _ = conn.Close() }()
 
-	// Placeholder for now:
-	resp.LatencyMs = 0.5 // Mock
+	latency := time.Since(start).Seconds() * 1000 // ms
+	resp.LatencyMs = latency
+	resp.Success = true
 	printJson(resp)
 }
 

@@ -34,6 +34,15 @@ func NewRouter(d *db.DB, orch *orchestrator.Orchestrator) http.Handler {
 		}
 	})
 
+	mux.HandleFunc("/results/latest", func(w http.ResponseWriter, r *http.Request) {
+		results, err := d.GetLatestResults()
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(results)
+	})
+
 	mux.HandleFunc("/test/speed", func(w http.ResponseWriter, r *http.Request) {
 		// Trigger a speed test manually
 		// Query params: source_id, target_id

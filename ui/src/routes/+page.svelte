@@ -1,21 +1,37 @@
 <script>
     import { onMount } from 'svelte';
-    import { getDevices } from '$lib/api';
+    import { getDevices, getResults } from '$lib/api';
 
     /** @type {import('$lib/api').Device[]} */
     let devices = [];
+    /** @type {import('$lib/api').Result[]} */
+    let results = [];
     let loading = true;
     let error = null;
 
     onMount(async () => {
         try {
-            devices = await getDevices();
+            const [d, r] = await Promise.all([getDevices(), getResults()]);
+            devices = d;
+            results = r;
         } catch (e) {
             error = e.message;
         } finally {
             loading = false;
         }
     });
+
+    /**
+     * @param {number} sourceId
+     * @param {number} targetId
+     */
+    function getResult(sourceId, targetId) {
+        // We might have two results (ping and speed).
+        // Let's find them.
+        const ping = results.find(r => r.source_id === sourceId && r.target_id === targetId && r.type === 'ping');
+        const speed = results.find(r => r.source_id === sourceId && r.target_id === targetId && r.type === 'speed');
+        return { ping, speed };
+    }
 </script>
 
 <div class="space-y-8">
@@ -62,10 +78,19 @@
                                             {#if source.id === target.id}
                                                 <span class="text-gray-600">-</span>
                                             {:else}
-                                                <!-- Todo: Inject real data here -->
+                                                {@const res = getResult(source.id, target.id)}
                                                 <div class="flex flex-col">
-                                                    <span class="text-sm font-mono text-cyan-400">0.5ms</span>
-                                                    <span class="text-xs text-gray-500">1.2Gbps</span>
+                                                    {#if res.ping}
+                                                        <span class="text-sm font-mono text-cyan-400">{res.ping.latency_ms.toFixed(1)}ms</span>
+                                                    {:else}
+                                                        <span class="text-sm font-mono text-gray-600">-- ms</span>
+                                                    {/if}
+                                                    
+                                                    {#if res.speed}
+                                                        <span class="text-xs text-gray-500">{res.speed.bandwidth_mbps.toFixed(1)} Mbps</span>
+                                                    {:else}
+                                                        <span class="text-xs text-gray-600">-- Mbps</span>
+                                                    {/if}
                                                 </div>
                                             {/if}
                                         </td>
