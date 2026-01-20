@@ -52,3 +52,14 @@ export async function addDevice(device) {
     });
     if (!res.ok) throw new Error('Failed to add device');
 }
+
+/**
+ * Delete a device
+ * @param {number} id
+ */
+export async function deleteDevice(id) {
+    const res = await fetch(`${API_BASE}/devices/${id}`, {
+        method: 'DELETE',
+    });
+    if (!res.ok) throw new Error('Failed to delete device');
+}

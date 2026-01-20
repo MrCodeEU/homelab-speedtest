@@ -67,6 +67,11 @@ func (d *DB) AddDevice(dev Device) error {
 	return err
 }
 
+func (d *DB) DeleteDevice(id int) error {
+	_, err := d.Exec("DELETE FROM devices WHERE id = ?", id)
+	return err
+}
+
 func (d *DB) AddResult(sourceID, targetID int, type_ string, latency, jitter, loss, bandwidth float64) error {
 	_, err := d.Exec(`INSERT INTO results 
 		(source_device_id, target_device_id, type, latency_ms, jitter_ms, packet_loss, bandwidth_mbps) 

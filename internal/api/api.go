@@ -3,6 +3,7 @@ package api
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 
 	"github.com/user/homelab-speedtest/internal/db"
 	"github.com/user/homelab-speedtest/internal/orchestrator"
@@ -10,6 +11,21 @@ import (
 
 func NewRouter(d *db.DB, orch *orchestrator.Orchestrator) http.Handler {
 	mux := http.NewServeMux()
+
+	mux.HandleFunc("DELETE /devices/{id}", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+
+		if err := d.DeleteDevice(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 
 	mux.HandleFunc("/devices", func(w http.ResponseWriter, r *http.Request) {
 		switch r.Method {
