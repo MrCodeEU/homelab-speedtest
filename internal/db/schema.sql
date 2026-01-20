@@ -35,6 +35,6 @@ CREATE TABLE IF NOT EXISTS results (
     FOREIGN KEY(target_device_id) REFERENCES devices(id)
 );
 
-CREATE INDEX idx_results_timestamp ON results(timestamp);
-CREATE INDEX idx_results_source ON results(source_device_id);
-CREATE INDEX idx_results_target ON results(target_device_id);
+CREATE INDEX IF NOT EXISTS idx_results_timestamp ON results(timestamp);
+CREATE INDEX IF NOT EXISTS idx_results_source ON results(source_device_id);
+CREATE INDEX IF NOT EXISTS idx_results_target ON results(target_device_id);
