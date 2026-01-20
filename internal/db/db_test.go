@@ -133,11 +133,11 @@ func TestGetLatestResults(t *testing.T) {
 
 	// Add multiple results for same pair
 	_ = db.AddResult(1, 2, "ping", 10.0, 0, 0, 0)
-	// Add another one slightly later (SQLite timestamp is usually fine, but let's be sure they are distinct if possible, 
+	// Add another one slightly later (SQLite timestamp is usually fine, but let's be sure they are distinct if possible,
 	// though SQL query uses MAX(timestamp) or order. In our schema it's DEFAULT CURRENT_TIMESTAMP.
 	// We might need to wait or manually insert with timestamp if we want to be 100% sure in a tight test.
 	// Actually, let's just insert one, wait a ms, insert another.
-	
+
 	_ = db.AddResult(1, 2, "ping", 5.0, 0, 0, 0)
 
 	results, err := db.GetLatestResults()
@@ -151,10 +151,10 @@ func TestGetLatestResults(t *testing.T) {
 		if r.SourceID == 1 && r.TargetID == 2 && r.Type == "ping" {
 			count++
 			// Depending on timestamp resolution, we might have both if they happened at same second.
-			// But ideally we want the "latest". 
+			// But ideally we want the "latest".
 		}
 	}
-	
+
 	// If the test is too fast, CURRENT_TIMESTAMP might be the same.
 	// But the logic should still hold.
 }
