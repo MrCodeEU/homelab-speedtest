@@ -64,3 +64,47 @@ export async function deleteDevice(id) {
     });
     if (!res.ok) throw new Error('Failed to delete device');
 }
+
+/**
+ * @typedef {Object} Schedule
+ * @property {number} id
+ * @property {string} type
+ * @property {string} cron
+ * @property {boolean} enabled
+ */
+
+/**
+ * Fetch schedules
+ * @returns {Promise<Schedule[]>}
+ */
+export async function getSchedules() {
+    const res = await fetch(`${API_BASE}/schedules`);
+    if (!res.ok) throw new Error('Failed to fetch schedules');
+    return res.json();
+}
+
+/**
+ * Update a schedule
+ * @param {string} type
+ * @param {string} cron
+ * @param {boolean} enabled
+ */
+export async function updateSchedule(type, cron, enabled) {
+    const res = await fetch(`${API_BASE}/schedules`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type, cron, enabled }),
+    });
+    if (!res.ok) throw new Error('Failed to update schedule');
+}
+
+/**
+ * Fetch history
+ * @param {number} [limit]
+ * @returns {Promise<Result[]>}
+ */
+export async function getHistory(limit = 100) {
+    const res = await fetch(`${API_BASE}/history?limit=${limit}`);
+    if (!res.ok) throw new Error('Failed to fetch history');
+    return res.json();
+}

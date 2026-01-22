@@ -15,6 +15,21 @@ type SSHClient struct {
 }
 
 func ConnectSSH(user, host string, port int, authMethods []ssh.AuthMethod) (*SSHClient, error) {
+	if len(authMethods) == 0 {
+		// Default to loading id_rsa
+		key, err := os.ReadFile("/root/.ssh/id_rsa")
+		if err != nil {
+			return nil, fmt.Errorf("failed to read private key: %w", err)
+		}
+		signer, err := ssh.ParsePrivateKey(key)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse private key: %w", err)
+		}
+		authMethods = []ssh.AuthMethod{
+			ssh.PublicKeys(signer),
+		}
+	}
+
 	config := &ssh.ClientConfig{
 		User: user,
 		Auth: authMethods,

@@ -43,13 +43,14 @@ func main() {
 	scheduler.Start()
 
 	// 5. Init API
-	router := api.NewRouter(database, orch)
+	apiHandler := api.NewHandler(database, orch, scheduler)
+	scheduler.OnResult = apiHandler.BroadcastResult
 
 	// 5. Start Server
 	// Serve UI static files (built from Svelte) at /
 	// API at /api
 
-	http.Handle("/api/", http.StripPrefix("/api", router))
+	http.Handle("/api/", http.StripPrefix("/api", apiHandler))
 
 	// Create a file server for the Svelte build (usually 'ui/build' or 'ui/dist')
 	// For production, we'd embed this. For dev, we might proxy.

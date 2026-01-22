@@ -1,5 +1,5 @@
 <script>
-    import { onMount } from 'svelte';
+    import { onMount, onDestroy } from 'svelte';
     import { getDevices, getResults } from '$lib/api';
 
     /** @type {import('$lib/api').Device[]} */
@@ -9,17 +9,68 @@
     let loading = true;
     /** @type {string|null} */
     let error = null;
+    /** @type {any} */
+    let interval;
 
-    onMount(async () => {
+    async function load() {
         try {
+            // Parallel fetch
             const [d, r] = await Promise.all([getDevices(), getResults()]);
             devices = d || [];
             results = r || [];
+            error = null;
         } catch (/** @type {any} */ e) {
-            error = e.message;
+            console.error("Poll failed", e);
+            // Don't show full error on screen for intermittent poll fails, just log
+            // Unless it's initial load
+            if (loading) error = e.message;
         } finally {
             loading = false;
         }
+    }
+
+    onMount(() => {
+        load();
+        
+        const evtSource = new EventSource('/api/events');
+        evtSource.onmessage = (event) => {
+            try {
+                /** @type {import('$lib/api').Result} */
+                const newResult = JSON.parse(event.data);
+                
+                // Update local state
+                const index = results.findIndex(r => 
+                    r.source_id === newResult.source_id && 
+                    r.target_id === newResult.target_id && 
+                    r.type === newResult.type
+                );
+
+                if (index !== -1) {
+                    // Replace existing
+                    results[index] = newResult;
+                } else {
+                    // Add new
+                    results.push(newResult);
+                }
+                // Trigger reactivity
+                results = results;
+            } catch (e) {
+                console.error("Failed to parse event", e);
+            }
+        };
+
+        evtSource.onerror = (err) => {
+            console.error("EventSource failed:", err);
+            // Optional: retry logic is built-in to EventSource usually, but if it closes...
+        };
+
+        return () => {
+            evtSource.close();
+        };
+    });
+
+    onDestroy(() => {
+        // Cleanup handled in return of onMount or explicit cleanup if needed
     });
 
     /**

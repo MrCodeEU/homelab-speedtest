@@ -86,6 +86,10 @@ func (o *Orchestrator) RunSpeedTest(source, target db.Device) (*WorkerResponse, 
 		return nil, fmt.Errorf("failed to parse output: %w, raw: %s", err, output)
 	}
 
+	if !resp.Success {
+		return &resp, fmt.Errorf("speed test failed: %s", resp.Error)
+	}
+
 	log.Printf("[Orchestrator] Speed Test Completed: %s -> %s | Bandwidth: %.2f Mbps", source.Name, target.Name, resp.BandwidthMbps)
 	return &resp, nil
 }
@@ -94,18 +98,44 @@ func (o *Orchestrator) RunSpeedTest(source, target db.Device) (*WorkerResponse, 
 func (o *Orchestrator) RunPing(source, target db.Device) (*WorkerResponse, error) {
 	log.Printf("[Orchestrator] Starting Ping Test: %s -> %s", source.Name, target.Name)
 
+	// 1. Connect to Source
 	log.Printf("[Orchestrator] Connecting to source %s...", source.Name)
-	client, err := ConnectSSH(source.SSHUser, source.Hostname, source.SSHPort, nil)
+	sourceClient, err := ConnectSSH(source.SSHUser, source.Hostname, source.SSHPort, nil)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to connect to source %s: %w", source.Name, err)
 	}
-	defer func() { _ = client.Close() }()
+	defer func() { _ = sourceClient.Close() }()
 
+	// 2. Connect to Target
+	log.Printf("[Orchestrator] Connecting to target %s...", target.Name)
+	targetClient, err := ConnectSSH(target.SSHUser, target.Hostname, target.SSHPort, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to target %s: %w", target.Name, err)
+	}
+	defer func() { _ = targetClient.Close() }()
+
+	// 3. Deploy Worker
 	log.Printf("[Orchestrator] Deploying worker to source %s...", source.Name)
-	if err = o.deployWorker(client); err != nil {
-		return nil, err
+	if err = o.deployWorker(sourceClient); err != nil {
+		return nil, fmt.Errorf("failed to deploy worker to source: %w", err)
+	}
+	log.Printf("[Orchestrator] Deploying worker to target %s...", target.Name)
+	if err = o.deployWorker(targetClient); err != nil {
+		return nil, fmt.Errorf("failed to deploy worker to target: %w", err)
 	}
 
+	// 4. Start Server on Target
+	serverPort := 8090
+	serverCmd := fmt.Sprintf("/tmp/hl-speedtest-worker -mode server -port %d", serverPort)
+	log.Printf("[Orchestrator] Starting worker server on target %s: %s", target.Name, serverCmd)
+
+	// Start server in background.
+	go func() {
+		_, _ = targetClient.RunCommand(serverCmd)
+	}()
+	time.Sleep(2 * time.Second) // Wait for server start
+
+	// 5. Run Ping on Source
 	targetAddr := target.Hostname
 	if target.IP != "" {
 		targetAddr = target.IP
@@ -114,7 +144,11 @@ func (o *Orchestrator) RunPing(source, target db.Device) (*WorkerResponse, error
 	// Target the worker server port (8090) for TCP ping
 	cmd := fmt.Sprintf("/tmp/hl-speedtest-worker -mode ping -target %s:8090", targetAddr)
 	log.Printf("[Orchestrator] Running ping command on source: %s", cmd)
-	output, errPing := client.RunCommand(cmd)
+	output, errPing := sourceClient.RunCommand(cmd)
+
+	// 6. Cleanup (Kill server on target)
+	go func() { _, _ = targetClient.RunCommand("pkill -f hl-speedtest-worker") }()
+
 	if errPing != nil {
 		log.Printf("[Orchestrator] Ping command failed. Output: %s", output)
 		return nil, errPing
@@ -124,7 +158,11 @@ func (o *Orchestrator) RunPing(source, target db.Device) (*WorkerResponse, error
 
 	var resp WorkerResponse
 	if err = json.Unmarshal([]byte(output), &resp); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to parse output: %w, raw: %s", err, output)
+	}
+
+	if !resp.Success {
+		return &resp, fmt.Errorf("ping test failed: %s", resp.Error)
 	}
 	
 	log.Printf("[Orchestrator] Ping Test Completed: %s -> %s | Latency: %.2f ms", source.Name, target.Name, resp.LatencyMs)

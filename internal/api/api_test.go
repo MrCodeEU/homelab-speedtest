@@ -22,7 +22,8 @@ func TestGetLatestResultsAPI(t *testing.T) {
 	defer func() { _ = database.Close() }()
 
 	orch := orchestrator.NewOrchestrator("./worker")
-	router := NewRouter(database, orch)
+	scheduler := orchestrator.NewScheduler(database, orch)
+	router := NewRouter(database, orch, scheduler)
 
 	// Seed data
 	_ = database.AddDevice(db.Device{Name: "S", Hostname: "s", SSHUser: "u", SSHPort: 22})
