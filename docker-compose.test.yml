@@ -1,0 +1,51 @@
+version: '3.8'
+
+services:
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: homelab-speedtest-server
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./test-env/keys/id_rsa:/root/.ssh/id_rsa:ro
+      - ./test-env/keys/id_rsa.pub:/root/.ssh/id_rsa.pub:ro
+      - speedtest-data:/app/data
+    environment:
+      - SSH_KNOWN_HOSTS=/dev/null
+    networks:
+      - speedtest-net
+
+  node1:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: homelab-speedtest-node1
+    hostname: node1
+    ports:
+      - "2222:22"
+    volumes:
+      - ./test-env/keys/authorized_keys:/root/.ssh/authorized_keys:ro
+    networks:
+      - speedtest-net
+
+  node2:
+    build:
+      context: .
+      dockerfile: Dockerfile.test
+    container_name: homelab-speedtest-node2
+    hostname: node2
+    ports:
+      - "2223:22"
+    volumes:
+      - ./test-env/keys/authorized_keys:/root/.ssh/authorized_keys:ro
+    networks:
+      - speedtest-net
+
+networks:
+  speedtest-net:
+    driver: bridge
+
+volumes:
+  speedtest-data:

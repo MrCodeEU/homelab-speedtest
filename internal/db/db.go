@@ -56,7 +56,7 @@ func (d *DB) GetDevices() ([]Device, error) {
 	}
 	defer func() { _ = rows.Close() }()
 
-	var devices []Device
+	devices := []Device{}
 	for rows.Next() {
 		var dev Device
 		if err := rows.Scan(&dev.ID, &dev.Name, &dev.Hostname, &dev.IP, &dev.SSHUser, &dev.SSHPort); err != nil {
@@ -122,7 +122,7 @@ func (d *DB) GetLatestResults() ([]Result, error) {
 	}
 	defer func() { _ = rows.Close() }()
 
-	var results []Result
+	results := []Result{}
 	for rows.Next() {
 		var res Result
 		if err := rows.Scan(&res.SourceID, &res.TargetID, &res.Type, &res.LatencyMs, &res.BandwidthMbps, &res.Timestamp, &res.Error); err != nil {

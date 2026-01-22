@@ -13,8 +13,8 @@
     onMount(async () => {
         try {
             const [d, r] = await Promise.all([getDevices(), getResults()]);
-            devices = d;
-            results = r;
+            devices = d || [];
+            results = r || [];
         } catch (/** @type {any} */ e) {
             error = e.message;
         } finally {

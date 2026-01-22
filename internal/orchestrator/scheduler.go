@@ -61,54 +61,56 @@ func (s *Scheduler) RunAllPings() {
 				var errStr string
 				var lat, jit, loss float64
 
-				if err != nil {
-					log.Printf("Ping %s->%s failed: %v", src.Name, dst.Name, err)
-					errStr = err.Error()
-				} else {
-					lat = resp.LatencyMs
-					jit = resp.JitterMs
-					loss = resp.PacketLoss
+								if err != nil {
+									log.Printf("Ping %s->%s failed: %v", src.Name, dst.Name, err)
+									errStr = err.Error()
+								} else {
+									lat = resp.LatencyMs
+									jit = resp.JitterMs
+									loss = resp.PacketLoss
+									log.Printf("Ping %s->%s success: %.2fms", src.Name, dst.Name, lat)
+								}
+				
+								// Save result (even if error)
+								if err := s.db.AddResult(src.ID, dst.ID, "ping", lat, jit, loss, 0, errStr); err != nil {
+									log.Printf("Failed to save result: %v", err)
+								}
+							}(source, target)
+						}
+					}
 				}
-
-				// Save result (even if error)
-				if err := s.db.AddResult(src.ID, dst.ID, "ping", lat, jit, loss, 0, errStr); err != nil {
-					log.Printf("Failed to save result: %v", err)
+				
+				func (s *Scheduler) RunAllSpeeds() {
+					log.Println("Running Speed tests...")
+					devices, err := s.db.GetDevices()
+					if err != nil {
+						log.Printf("Failed to get devices: %v", err)
+						return
+					}
+				
+					for _, source := range devices {
+						for _, target := range devices {
+							if source.ID == target.ID {
+								continue
+							}
+							go func(src, dst db.Device) {
+								resp, err := s.orch.RunSpeedTest(src, dst)
+								var errStr string
+								var bw float64
+				
+								if err != nil {
+									log.Printf("Speed %s->%s failed: %v", src.Name, dst.Name, err)
+									errStr = err.Error()
+								} else {
+									bw = resp.BandwidthMbps
+									log.Printf("Speed %s->%s success: %.2fMbps", src.Name, dst.Name, bw)
+								}
+								
+								// Save result
+								if err := s.db.AddResult(src.ID, dst.ID, "speed", 0, 0, 0, bw, errStr); err != nil {
+									log.Printf("Failed to save result: %v", err)
+								}
+							}(source, target)
+						}
+					}
 				}
-			}(source, target)
-		}
-	}
-}
-
-func (s *Scheduler) RunAllSpeeds() {
-	log.Println("Running Speed tests...")
-	devices, err := s.db.GetDevices()
-	if err != nil {
-		log.Printf("Failed to get devices: %v", err)
-		return
-	}
-
-	for _, source := range devices {
-		for _, target := range devices {
-			if source.ID == target.ID {
-				continue
-			}
-			go func(src, dst db.Device) {
-				resp, err := s.orch.RunSpeedTest(src, dst)
-				var errStr string
-				var bw float64
-
-				if err != nil {
-					log.Printf("Speed %s->%s failed: %v", src.Name, dst.Name, err)
-					errStr = err.Error()
-				} else {
-					bw = resp.BandwidthMbps
-				}
-
-				// Save result
-				if err := s.db.AddResult(src.ID, dst.ID, "speed", 0, 0, 0, bw, errStr); err != nil {
-					log.Printf("Failed to save result: %v", err)
-				}
-			}(source, target)
-		}
-	}
-}
