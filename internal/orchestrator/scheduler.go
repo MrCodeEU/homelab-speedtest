@@ -103,7 +103,7 @@ func (s *Scheduler) RunAllSpeeds() {
 				} else {
 					bw = resp.BandwidthMbps
 				}
-				
+
 				// Save result
 				if err := s.db.AddResult(src.ID, dst.ID, "speed", 0, 0, 0, bw, errStr); err != nil {
 					log.Printf("Failed to save result: %v", err)
