@@ -27,7 +27,7 @@ func TestGetLatestResultsAPI(t *testing.T) {
 	// Seed data
 	_ = database.AddDevice(db.Device{Name: "S", Hostname: "s", SSHUser: "u", SSHPort: 22})
 	_ = database.AddDevice(db.Device{Name: "T", Hostname: "t", SSHUser: "u", SSHPort: 22})
-	_ = database.AddResult(1, 2, "ping", 1.2, 0, 0, 0)
+	_ = database.AddResult(1, 2, "ping", 1.2, 0, 0, 0, "")
 
 	req, _ := http.NewRequest("GET", "/results/latest", nil)
 	rr := httptest.NewRecorder()

@@ -100,13 +100,13 @@ func TestAddResult(t *testing.T) {
 	_ = db.AddDevice(Device{Name: "Target", Hostname: "dst.local", SSHUser: "root", SSHPort: 22})
 
 	// Add a result
-	errResult := db.AddResult(1, 2, "ping", 0.5, 0.1, 0.0, 0)
+	errResult := db.AddResult(1, 2, "ping", 0.5, 0.1, 0.0, 0, "")
 	if errResult != nil {
 		t.Fatalf("Failed to add result: %v", errResult)
 	}
 
 	// Add speed result
-	errSpeed := db.AddResult(1, 2, "speed", 0, 0, 0, 950.5)
+	errSpeed := db.AddResult(1, 2, "speed", 0, 0, 0, 950.5, "")
 	if errSpeed != nil {
 		t.Fatalf("Failed to add speed result: %v", errSpeed)
 	}
@@ -132,13 +132,13 @@ func TestGetLatestResults(t *testing.T) {
 	_ = db.AddDevice(Device{Name: "D2", Hostname: "d2", SSHUser: "r", SSHPort: 22})
 
 	// Add multiple results for same pair
-	_ = db.AddResult(1, 2, "ping", 10.0, 0, 0, 0)
+	_ = db.AddResult(1, 2, "ping", 10.0, 0, 0, 0, "")
 	// Add another one slightly later (SQLite timestamp is usually fine, but let's be sure they are distinct if possible,
 	// though SQL query uses MAX(timestamp) or order. In our schema it's DEFAULT CURRENT_TIMESTAMP.
 	// We might need to wait or manually insert with timestamp if we want to be 100% sure in a tight test.
 	// Actually, let's just insert one, wait a ms, insert another.
 
-	_ = db.AddResult(1, 2, "ping", 5.0, 0, 0, 0)
+	_ = db.AddResult(1, 2, "ping", 5.0, 0, 0, 0, "")
 
 	results, err := db.GetLatestResults()
 	if err != nil {
