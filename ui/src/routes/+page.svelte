@@ -7,6 +7,7 @@
     /** @type {import('$lib/api').Result[]} */
     let results = [];
     let loading = true;
+    /** @type {string|null} */
     let error = null;
 
     onMount(async () => {
@@ -14,7 +15,7 @@
             const [d, r] = await Promise.all([getDevices(), getResults()]);
             devices = d;
             results = r;
-        } catch (e) {
+        } catch (/** @type {any} */ e) {
             error = e.message;
         } finally {
             loading = false;
@@ -51,7 +52,7 @@
             Error: {error}
         </div>
     {:else}
-        <!-- Connectivity Matrix (Placeholder for now) -->
+        <!-- Connectivity Matrix -->
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             <div class="col-span-1 md:col-span-2 lg:col-span-3 bg-gray-800/50 border border-gray-700 rounded-xl p-6 backdrop-blur">
                 <h2 class="text-xl font-semibold mb-6 flex items-center">
@@ -79,15 +80,35 @@
                                                 <span class="text-gray-600">-</span>
                                             {:else}
                                                 {@const res = getResult(source.id, target.id)}
-                                                <div class="flex flex-col">
+                                                <div class="flex flex-col gap-1">
+                                                    <!-- PING RESULT -->
                                                     {#if res.ping}
-                                                        <span class="text-sm font-mono text-cyan-400">{res.ping.latency_ms.toFixed(1)}ms</span>
+                                                        {#if res.ping.error}
+                                                            <div class="text-red-400 text-xs font-mono flex items-center gap-1 cursor-help" title={res.ping.error}>
+                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3">
+                                                                    <path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" />
+                                                                </svg>
+                                                                Ping Err
+                                                            </div>
+                                                        {:else}
+                                                            <span class="text-sm font-mono text-cyan-400">{res.ping.latency_ms.toFixed(1)}ms</span>
+                                                        {/if}
                                                     {:else}
                                                         <span class="text-sm font-mono text-gray-600">-- ms</span>
                                                     {/if}
                                                     
+                                                    <!-- SPEED RESULT -->
                                                     {#if res.speed}
-                                                        <span class="text-xs text-gray-500">{res.speed.bandwidth_mbps.toFixed(1)} Mbps</span>
+                                                        {#if res.speed.error}
+                                                            <div class="text-red-400 text-xs font-mono flex items-center gap-1 cursor-help" title={res.speed.error}>
+                                                                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3">
+                                                                    <path fill-rule="evenodd" d="M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0Zm-8-5a.75.75 0 0 1 .75.75v4.5a.75.75 0 0 1-1.5 0v-4.5A.75.75 0 0 1 10 5Zm0 10a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" />
+                                                                </svg>
+                                                                Spd Err
+                                                            </div>
+                                                        {:else}
+                                                            <span class="text-xs text-gray-500">{res.speed.bandwidth_mbps.toFixed(1)} Mbps</span>
+                                                        {/if}
                                                     {:else}
                                                         <span class="text-xs text-gray-600">-- Mbps</span>
                                                     {/if}

@@ -16,6 +16,7 @@
  * @property {number} latency_ms
  * @property {number} bandwidth_mbps
  * @property {string} timestamp
+ * @property {string} error
  */
 
 const API_BASE = '/api';

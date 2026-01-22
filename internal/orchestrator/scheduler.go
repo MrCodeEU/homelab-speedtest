@@ -58,12 +58,20 @@ func (s *Scheduler) RunAllPings() {
 			}
 			go func(src, dst db.Device) {
 				resp, err := s.orch.RunPing(src, dst)
+				var errStr string
+				var lat, jit, loss float64
+
 				if err != nil {
 					log.Printf("Ping %s->%s failed: %v", src.Name, dst.Name, err)
-					return
+					errStr = err.Error()
+				} else {
+					lat = resp.LatencyMs
+					jit = resp.JitterMs
+					loss = resp.PacketLoss
 				}
-				// Save result
-				if err := s.db.AddResult(src.ID, dst.ID, "ping", resp.LatencyMs, resp.JitterMs, resp.PacketLoss, 0); err != nil {
+
+				// Save result (even if error)
+				if err := s.db.AddResult(src.ID, dst.ID, "ping", lat, jit, loss, 0, errStr); err != nil {
 					log.Printf("Failed to save result: %v", err)
 				}
 			}(source, target)
@@ -86,12 +94,18 @@ func (s *Scheduler) RunAllSpeeds() {
 			}
 			go func(src, dst db.Device) {
 				resp, err := s.orch.RunSpeedTest(src, dst)
+				var errStr string
+				var bw float64
+
 				if err != nil {
 					log.Printf("Speed %s->%s failed: %v", src.Name, dst.Name, err)
-					return
+					errStr = err.Error()
+				} else {
+					bw = resp.BandwidthMbps
 				}
+				
 				// Save result
-				if err := s.db.AddResult(src.ID, dst.ID, "speed", 0, 0, 0, resp.BandwidthMbps); err != nil {
+				if err := s.db.AddResult(src.ID, dst.ID, "speed", 0, 0, 0, bw, errStr); err != nil {
 					log.Printf("Failed to save result: %v", err)
 				}
 			}(source, target)

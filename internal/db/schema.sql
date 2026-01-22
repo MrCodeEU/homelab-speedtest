@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS results (
 
     -- Speed specific
     bandwidth_mbps REAL,
+
+    -- Error reporting
+    error TEXT,
     
     FOREIGN KEY(source_device_id) REFERENCES devices(id),
     FOREIGN KEY(target_device_id) REFERENCES devices(id)

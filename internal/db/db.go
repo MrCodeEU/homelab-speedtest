@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	_ "embed"
 	"fmt"
+	"strings"
 
 	_ "modernc.org/sqlite"
 
@@ -30,6 +31,11 @@ func New(cfg config.DatabaseConfig) (*DB, error) {
 	if _, err := db.Exec(schema); err != nil {
 		return nil, fmt.Errorf("failed to apply schema: %w", err)
 	}
+
+	// Simple migration: check if error column exists, if not add it
+	// (This is a quick fix for existing DBs)
+	// We ignore the error because if it exists, it's fine.
+	_, _ = db.Exec("ALTER TABLE results ADD COLUMN error TEXT")
 
 	return &DB{DB: db}, nil
 }
@@ -72,11 +78,11 @@ func (d *DB) DeleteDevice(id int) error {
 	return err
 }
 
-func (d *DB) AddResult(sourceID, targetID int, type_ string, latency, jitter, loss, bandwidth float64) error {
+func (d *DB) AddResult(sourceID, targetID int, type_ string, latency, jitter, loss, bandwidth float64, errorMsg string) error {
 	_, err := d.Exec(`INSERT INTO results 
-		(source_device_id, target_device_id, type, latency_ms, jitter_ms, packet_loss, bandwidth_mbps) 
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		sourceID, targetID, type_, latency, jitter, loss, bandwidth)
+		(source_device_id, target_device_id, type, latency_ms, jitter_ms, packet_loss, bandwidth_mbps, error) 
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		sourceID, targetID, type_, latency, jitter, loss, bandwidth, errorMsg)
 	return err
 }
 
@@ -87,6 +93,7 @@ type Result struct {
 	LatencyMs     float64 `json:"latency_ms"`
 	BandwidthMbps float64 `json:"bandwidth_mbps"`
 	Timestamp     string  `json:"timestamp"`
+	Error         string  `json:"error"`
 }
 
 func (d *DB) GetLatestResults() ([]Result, error) {
@@ -97,7 +104,8 @@ func (d *DB) GetLatestResults() ([]Result, error) {
 			r.type, 
 			IFNULL(r.latency_ms, 0), 
 			IFNULL(r.bandwidth_mbps, 0), 
-			r.timestamp 
+			r.timestamp,
+			IFNULL(r.error, '')
 		FROM results r
 		INNER JOIN (
 			SELECT source_device_id, target_device_id, type, MAX(timestamp) as max_ts
@@ -117,9 +125,11 @@ func (d *DB) GetLatestResults() ([]Result, error) {
 	var results []Result
 	for rows.Next() {
 		var res Result
-		if err := rows.Scan(&res.SourceID, &res.TargetID, &res.Type, &res.LatencyMs, &res.BandwidthMbps, &res.Timestamp); err != nil {
+		if err := rows.Scan(&res.SourceID, &res.TargetID, &res.Type, &res.LatencyMs, &res.BandwidthMbps, &res.Timestamp, &res.Error); err != nil {
 			return nil, err
 		}
+		// If error is present, we might want to trim it or just pass it through
+		res.Error = strings.TrimSpace(res.Error)
 		results = append(results, res)
 	}
 	return results, nil
