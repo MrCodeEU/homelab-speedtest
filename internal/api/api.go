@@ -19,7 +19,7 @@ type Handler struct {
 	scheduler *orchestrator.Scheduler
 
 	clientsMu sync.Mutex
-	clients   map[chan db.Result]bool
+	clients   map[chan any]bool
 }
 
 func NewHandler(d *db.DB, orch *orchestrator.Orchestrator, scheduler *orchestrator.Scheduler) *Handler {
@@ -28,21 +28,34 @@ func NewHandler(d *db.DB, orch *orchestrator.Orchestrator, scheduler *orchestrat
 		db:        d,
 		orch:      orch,
 		scheduler: scheduler,
-		clients:   make(map[chan db.Result]bool),
+		clients:   make(map[chan any]bool),
 	}
 	h.routes()
 	return h
 }
 
 func (h *Handler) BroadcastResult(res db.Result) {
+	h.broadcast(map[string]any{
+		"type": "result",
+		"data": res,
+	})
+}
+
+func (h *Handler) BroadcastStatus(msg string) {
+	h.broadcast(map[string]any{
+		"type": "status",
+		"data": msg,
+	})
+}
+
+func (h *Handler) broadcast(event any) {
 	h.clientsMu.Lock()
 	defer h.clientsMu.Unlock()
 
 	for clientChan := range h.clients {
 		select {
-		case clientChan <- res:
+		case clientChan <- event:
 		default:
-			// Client blocked, likely disconnected or slow. Drop?
 		}
 	}
 }
@@ -149,7 +162,7 @@ func (h *Handler) routes() {
 		w.Header().Set("Connection", "keep-alive")
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 
-		clientChan := make(chan db.Result, 10)
+		clientChan := make(chan any, 10)
 		h.clientsMu.Lock()
 		h.clients[clientChan] = true
 		h.clientsMu.Unlock()
@@ -178,8 +191,8 @@ func (h *Handler) routes() {
 			case <-ticker.C:
 				fmt.Fprintf(w, ": keep-alive\n\n")
 				flusher.Flush()
-			case res := <-clientChan:
-				data, err := json.Marshal(res)
+			case event := <-clientChan:
+				data, err := json.Marshal(event)
 				if err != nil {
 					continue
 				}

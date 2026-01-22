@@ -45,6 +45,7 @@ func main() {
 	// 5. Init API
 	apiHandler := api.NewHandler(database, orch, scheduler)
 	scheduler.OnResult = apiHandler.BroadcastResult
+	scheduler.OnStatus = apiHandler.BroadcastStatus
 
 	// 5. Start Server
 	// Serve UI static files (built from Svelte) at /

@@ -94,7 +94,7 @@ func (s *SSHClient) CopyFile(localPath, remotePath string, mode os.FileMode) err
 		_, _ = io.Copy(w, f)
 	}()
 
-	if err = session.Run(fmt.Sprintf("cat > %s", remotePath)); err != nil {
+	if err = session.Run(fmt.Sprintf("rm -f %s && cat > %s", remotePath, remotePath)); err != nil {
 		return fmt.Errorf("failed to copy file: %w", err)
 	}
 

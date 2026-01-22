@@ -13,6 +13,7 @@ type Scheduler struct {
 
 	stopChan chan struct{}
 	OnResult func(db.Result)
+	OnStatus func(string)
 }
 
 func NewScheduler(d *db.DB, orch *Orchestrator) *Scheduler {
@@ -93,6 +94,9 @@ func (s *Scheduler) RunAllPings() {
 			}
 			// Run sequentially
 			func(src, dst db.Device) {
+				if s.OnStatus != nil {
+					s.OnStatus("Pinging " + src.Name + " -> " + dst.Name)
+				}
 				resp, err := s.orch.RunPing(src, dst)
 				var errStr string
 				var lat, jit, loss float64
@@ -140,6 +144,9 @@ func (s *Scheduler) RunAllSpeeds() {
 			}
 			// Run sequentially
 			func(src, dst db.Device) {
+				if s.OnStatus != nil {
+					s.OnStatus("Speed Test " + src.Name + " -> " + dst.Name)
+				}
 				resp, err := s.orch.RunSpeedTest(src, dst)
 				var errStr string
 				var bw float64
