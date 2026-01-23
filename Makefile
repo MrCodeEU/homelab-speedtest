@@ -9,9 +9,9 @@ local-test:
 	@cp test-env/keys/id_rsa.pub test-env/keys/authorized_keys
 	@echo "Creating seed data..."
 	@echo "INSERT OR IGNORE INTO devices (name, hostname, ip, ssh_user, ssh_port) VALUES ('Node 1', 'node1', 'node1', 'root', 22), ('Node 2', 'node2', 'node2', 'root', 22);" > test-env/seed.sql
-	@echo "INSERT OR IGNORE INTO schedules (type, cron, enabled) VALUES ('ping', '*/1 * * * *', 1), ('speed', '*/5 * * * *', 1);" >> test-env/seed.sql
+	@echo "INSERT OR IGNORE INTO schedules (type, cron, enabled) VALUES ('ping', '1m', 1), ('speed', '5m', 1);" >> test-env/seed.sql
 	@echo "Building and starting containers..."
-	@docker compose -f docker-compose.test.yml down
+	@docker compose -f docker-compose.test.yml down -v
 	@docker compose -f docker-compose.test.yml up --build -d
 	@echo "Waiting for database initialization..."
 	@max_retries=10; \

@@ -11,6 +11,7 @@ import (
 	"github.com/user/homelab-speedtest/internal/api"
 	"github.com/user/homelab-speedtest/internal/config"
 	"github.com/user/homelab-speedtest/internal/db"
+	"github.com/user/homelab-speedtest/internal/notify"
 	"github.com/user/homelab-speedtest/internal/orchestrator"
 )
 
@@ -38,14 +39,26 @@ func main() {
 	workerPath := "./worker"
 	orch := orchestrator.NewOrchestrator(workerPath)
 
-	// 4. Init Scheduler
+	// 4. Init Notification Manager
+	notifier := notify.NewManager(database)
+
+	// 5. Init Scheduler
 	scheduler := orchestrator.NewScheduler(database, orch)
 	scheduler.Start()
 
-	// 5. Init API
-	apiHandler := api.NewHandler(database, orch, scheduler)
-	scheduler.OnResult = apiHandler.BroadcastResult
+	// 6. Init API
+	apiHandler := api.NewHandler(database, orch, scheduler, notifier)
+
+	// Wire up callbacks
+	scheduler.OnResult = func(result db.Result) {
+		apiHandler.BroadcastResult(result)
+		// Check alert rules and send notifications
+		devices, _ := database.GetDevices()
+		notifier.CheckAndNotify(result, devices)
+	}
 	scheduler.OnStatus = apiHandler.BroadcastStatus
+	scheduler.OnScheduleInfo = apiHandler.BroadcastScheduleInfo
+	scheduler.OnQueueStatus = apiHandler.BroadcastQueueStatus
 
 	// 5. Start Server
 	// Serve UI static files (built from Svelte) at /

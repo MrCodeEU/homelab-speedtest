@@ -16,12 +16,25 @@ func New(cfg config.NtfyConfig) *NtfyService {
 	return &NtfyService{Config: cfg}
 }
 
+// Send sends a notification using the default topic
 func (n *NtfyService) Send(title, message, priority string) error {
+	return n.SendToTopic(n.Config.Topic, title, message, priority)
+}
+
+// SendToTopic sends a notification to a specific topic (or default if empty)
+func (n *NtfyService) SendToTopic(topic, title, message, priority string) error {
 	if !n.Config.Enabled {
 		return nil
 	}
 
-	url := fmt.Sprintf("%s/%s", n.Config.Server, n.Config.Topic)
+	if topic == "" {
+		topic = n.Config.Topic
+	}
+	if topic == "" {
+		return fmt.Errorf("no topic specified")
+	}
+
+	url := fmt.Sprintf("%s/%s", n.Config.Server, topic)
 
 	// Ntfy supports headers for title, priority etc.
 	req, err := http.NewRequest("POST", url, bytes.NewBufferString(message))

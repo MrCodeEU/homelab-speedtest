@@ -38,7 +38,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /server ./cmd/server
 
 # Stage 4: Runtime
 FROM alpine:latest
-RUN apk add --no-cache ca-certificates openssh-client sqlite
+RUN apk add --no-cache ca-certificates openssh-client sqlite psmisc
 
 WORKDIR /app
 COPY --from=server-builder /server .

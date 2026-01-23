@@ -10,6 +10,7 @@ import (
 
 	"github.com/user/homelab-speedtest/internal/config"
 	"github.com/user/homelab-speedtest/internal/db"
+	"github.com/user/homelab-speedtest/internal/notify"
 	"github.com/user/homelab-speedtest/internal/orchestrator"
 )
 
@@ -23,7 +24,8 @@ func TestGetLatestResultsAPI(t *testing.T) {
 
 	orch := orchestrator.NewOrchestrator("./worker")
 	scheduler := orchestrator.NewScheduler(database, orch)
-	router := NewRouter(database, orch, scheduler)
+	notifier := notify.NewManager(database)
+	handler := NewHandler(database, orch, scheduler, notifier)
 
 	// Seed data
 	_ = database.AddDevice(db.Device{Name: "S", Hostname: "s", SSHUser: "u", SSHPort: 22})
@@ -32,7 +34,7 @@ func TestGetLatestResultsAPI(t *testing.T) {
 
 	req, _ := http.NewRequest("GET", "/results/latest", nil)
 	rr := httptest.NewRecorder()
-	router.ServeHTTP(rr, req)
+	handler.ServeHTTP(rr, req)
 
 	if rr.Code != http.StatusOK {
 		t.Errorf("Expected status 200, got %d", rr.Code)

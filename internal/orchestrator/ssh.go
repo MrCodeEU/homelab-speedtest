@@ -3,7 +3,6 @@ package orchestrator
 import (
 	"bytes"
 	"fmt"
-	"io"
 	"os"
 	"time"
 
@@ -16,7 +15,6 @@ type SSHClient struct {
 
 func ConnectSSH(user, host string, port int, authMethods []ssh.AuthMethod) (*SSHClient, error) {
 	if len(authMethods) == 0 {
-		// Default to loading id_rsa
 		key, err := os.ReadFile("/root/.ssh/id_rsa")
 		if err != nil {
 			return nil, fmt.Errorf("failed to read private key: %w", err)
@@ -31,13 +29,10 @@ func ConnectSSH(user, host string, port int, authMethods []ssh.AuthMethod) (*SSH
 	}
 
 	config := &ssh.ClientConfig{
-		User: user,
-		Auth: authMethods,
-		// CAUTION: In a real environment, HostKeyCallback should be strict.
-		// For this homelab simplified setup, we skip verification or user must configure known_hosts.
-		// We'll use InsecureIgnoreHostKey for now as per "safe-ish" plan, but should ideally use known_hosts.
+		User:            user,
+		Auth:            authMethods,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         5 * time.Second,
+		Timeout:         10 * time.Second,
 	}
 
 	addr := fmt.Sprintf("%s:%d", host, port)
@@ -56,7 +51,6 @@ func (s *SSHClient) Close() error {
 	return nil
 }
 
-// CopyFile copies a local file to the remote destination.
 func (s *SSHClient) CopyFile(localPath, remotePath string, mode os.FileMode) error {
 	f, err := os.Open(localPath)
 	if err != nil {
@@ -64,67 +58,47 @@ func (s *SSHClient) CopyFile(localPath, remotePath string, mode os.FileMode) err
 	}
 	defer func() { _ = f.Close() }()
 
-	stat, err := f.Stat()
-	if err != nil {
-		return err
-	}
-	// Use actual file size/mode if not overridden, but we often want +x
-	_ = stat
-
 	session, err := s.client.NewSession()
 	if err != nil {
 		return err
 	}
 	defer func() { _ = session.Close() }()
 
-	// SCP protocol details are tricky to implement manually via stdin.
-	// A simpler approach is 'cat > remotePath' if the file is small enough,
-	// OR use SFTP if available. Most unix systems have 'cat'.
-	// Let's use 'cat' for simplicity with the worker binary.
-
-	// Start remote execution of 'cat > remotePath'
-	// We also chmod it afterwards.
-
-	go func() {
-		w, errInside := session.StdinPipe()
-		if errInside != nil {
-			return
-		}
-		defer func() { _ = w.Close() }()
-		_, _ = io.Copy(w, f)
-	}()
-
-	if err = session.Run(fmt.Sprintf("rm -f %s && cat > %s", remotePath, remotePath)); err != nil {
+	session.Stdin = f
+	cmd := fmt.Sprintf("rm -f %s && cat > %s && chmod %o %s", remotePath, remotePath, mode, remotePath)
+	if err = session.Run(cmd); err != nil {
 		return fmt.Errorf("failed to copy file: %w", err)
-	}
-
-	// Chmod
-	session2, err2 := s.client.NewSession()
-	if err2 != nil {
-		return err2
-	}
-	defer func() { _ = session2.Close() }()
-
-	if err = session2.Run(fmt.Sprintf("chmod %o %s", mode, remotePath)); err != nil {
-		return fmt.Errorf("failed to chmod: %w", err)
 	}
 
 	return nil
 }
 
-func (s *SSHClient) RunCommand(cmd string) (string, error) {
+func (s *SSHClient) FileExists(path string) bool {
 	session, err := s.client.NewSession()
 	if err != nil {
-		return "", err
+		return false
+	}
+	defer func() { _ = session.Close() }()
+	err = session.Run(fmt.Sprintf("test -f %s", path))
+	return err == nil
+}
+
+// RunCommand executes a command and returns stdout and stderr separately.
+func (s *SSHClient) RunCommand(cmd string) (string, string, error) {
+	session, err := s.client.NewSession()
+	if err != nil {
+		return "", "", err
 	}
 	defer func() { _ = session.Close() }()
 
-	var b bytes.Buffer
-	session.Stdout = &b
-	session.Stderr = &b // Combine stderr for debug
+	var stdout, stderr bytes.Buffer
+	session.Stdout = &stdout
+	session.Stderr = &stderr
 
-	if err = session.Run(cmd); err != nil {
-		return b.String(), err
-	}
-	return b.String(), nil
+	err = session.Run(cmd)
+
+	cleanOut := bytes.ReplaceAll(stdout.Bytes(), []byte{0}, []byte{})
+	cleanErr := bytes.ReplaceAll(stderr.Bytes(), []byte{0}, []byte{})
+
+	return string(bytes.TrimSpace(cleanOut)), string(bytes.TrimSpace(cleanErr)), err
 }

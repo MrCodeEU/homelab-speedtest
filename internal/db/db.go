@@ -122,7 +122,7 @@ func (d *DB) UpdateSchedule(type_ string, cron string, enabled bool) error {
 	// Actually schema.sql says: id INTEGER PRIMARY KEY, type TEXT. It doesn't enforce unique type.
 	// But our seed.sql inserts one for 'ping' and one for 'speed'.
 	// Let's UPDATE based on type.
-	
+
 	res, err := d.Exec("UPDATE schedules SET cron = ?, enabled = ? WHERE type = ?", cron, enabled, type_)
 	if err != nil {
 		return err
@@ -171,9 +171,111 @@ type Result struct {
 	TargetID      int     `json:"target_id"`
 	Type          string  `json:"type"`
 	LatencyMs     float64 `json:"latency_ms"`
+	JitterMs      float64 `json:"jitter_ms"`
+	PacketLoss    float64 `json:"packet_loss"`
 	BandwidthMbps float64 `json:"bandwidth_mbps"`
 	Timestamp     string  `json:"timestamp"`
 	Error         string  `json:"error"`
+}
+
+// Notification Settings
+
+func (d *DB) GetNotificationSetting(key string) (string, error) {
+	var value string
+	err := d.QueryRow("SELECT value FROM notification_settings WHERE key = ?", key).Scan(&value)
+	if err != nil {
+		return "", err
+	}
+	return value, nil
+}
+
+func (d *DB) SetNotificationSetting(key, value string) error {
+	_, err := d.Exec(`INSERT INTO notification_settings (key, value) VALUES (?, ?)
+		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
+	return err
+}
+
+func (d *DB) GetAllNotificationSettings() (map[string]string, error) {
+	rows, err := d.Query("SELECT key, value FROM notification_settings")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	settings := make(map[string]string)
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			return nil, err
+		}
+		settings[key] = value
+	}
+	return settings, nil
+}
+
+// Alert Rules
+
+type AlertRule struct {
+	ID              int      `json:"id"`
+	Name            string   `json:"name"`
+	EventType       string   `json:"event_type"` // 'speed_below', 'ping_above', 'packet_loss_above', 'test_error'
+	Threshold       *float64 `json:"threshold"`  // NULL for test_error
+	SourceDeviceID  *int     `json:"source_device_id"`
+	TargetDeviceID  *int     `json:"target_device_id"`
+	NotifyNtfy      bool     `json:"notify_ntfy"`
+	NtfyTopic       string   `json:"ntfy_topic"`
+	NotifyEmail     bool     `json:"notify_email"`
+	EmailRecipients string   `json:"email_recipients"`
+	Enabled         bool     `json:"enabled"`
+	CreatedAt       string   `json:"created_at"`
+}
+
+func (d *DB) GetAlertRules() ([]AlertRule, error) {
+	rows, err := d.Query(`SELECT id, name, event_type, threshold, source_device_id, target_device_id,
+		notify_ntfy, IFNULL(ntfy_topic, ''), notify_email, IFNULL(email_recipients, ''), enabled, created_at
+		FROM alert_rules ORDER BY id`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	rules := []AlertRule{}
+	for rows.Next() {
+		var r AlertRule
+		if err := rows.Scan(&r.ID, &r.Name, &r.EventType, &r.Threshold, &r.SourceDeviceID, &r.TargetDeviceID,
+			&r.NotifyNtfy, &r.NtfyTopic, &r.NotifyEmail, &r.EmailRecipients, &r.Enabled, &r.CreatedAt); err != nil {
+			return nil, err
+		}
+		rules = append(rules, r)
+	}
+	return rules, nil
+}
+
+func (d *DB) CreateAlertRule(rule AlertRule) (int64, error) {
+	res, err := d.Exec(`INSERT INTO alert_rules
+		(name, event_type, threshold, source_device_id, target_device_id, notify_ntfy, ntfy_topic, notify_email, email_recipients, enabled)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rule.Name, rule.EventType, rule.Threshold, rule.SourceDeviceID, rule.TargetDeviceID,
+		rule.NotifyNtfy, rule.NtfyTopic, rule.NotifyEmail, rule.EmailRecipients, rule.Enabled)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+func (d *DB) UpdateAlertRule(rule AlertRule) error {
+	_, err := d.Exec(`UPDATE alert_rules SET
+		name = ?, event_type = ?, threshold = ?, source_device_id = ?, target_device_id = ?,
+		notify_ntfy = ?, ntfy_topic = ?, notify_email = ?, email_recipients = ?, enabled = ?
+		WHERE id = ?`,
+		rule.Name, rule.EventType, rule.Threshold, rule.SourceDeviceID, rule.TargetDeviceID,
+		rule.NotifyNtfy, rule.NtfyTopic, rule.NotifyEmail, rule.EmailRecipients, rule.Enabled, rule.ID)
+	return err
+}
+
+func (d *DB) DeleteAlertRule(id int) error {
+	_, err := d.Exec("DELETE FROM alert_rules WHERE id = ?", id)
+	return err
 }
 
 func (d *DB) GetLatestResults() ([]Result, error) {

@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS devices (
 
 CREATE TABLE IF NOT EXISTS schedules (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    type TEXT NOT NULL, -- 'ping', 'speed'
+    type TEXT NOT NULL UNIQUE, -- 'ping', 'speed'
     cron TEXT NOT NULL,
     enabled BOOLEAN DEFAULT 1,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -41,3 +41,27 @@ CREATE TABLE IF NOT EXISTS results (
 CREATE INDEX IF NOT EXISTS idx_results_timestamp ON results(timestamp);
 CREATE INDEX IF NOT EXISTS idx_results_source ON results(source_device_id);
 CREATE INDEX IF NOT EXISTS idx_results_target ON results(target_device_id);
+
+-- Notification settings (SMTP + ntfy defaults)
+CREATE TABLE IF NOT EXISTS notification_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
+-- Alert rules
+CREATE TABLE IF NOT EXISTS alert_rules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    event_type TEXT NOT NULL,  -- 'speed_below', 'ping_above', 'packet_loss_above', 'test_error'
+    threshold REAL,            -- NULL for test_error
+    source_device_id INTEGER,  -- NULL = global (all pairs)
+    target_device_id INTEGER,  -- NULL = global (all pairs)
+    notify_ntfy BOOLEAN DEFAULT 0,
+    ntfy_topic TEXT,           -- Override default topic per rule
+    notify_email BOOLEAN DEFAULT 0,
+    email_recipients TEXT,     -- Comma-separated emails
+    enabled BOOLEAN DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY(source_device_id) REFERENCES devices(id) ON DELETE CASCADE,
+    FOREIGN KEY(target_device_id) REFERENCES devices(id) ON DELETE CASCADE
+);

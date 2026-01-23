@@ -3,32 +3,49 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/user/homelab-speedtest/internal/db"
+	"github.com/user/homelab-speedtest/internal/notify"
 	"github.com/user/homelab-speedtest/internal/orchestrator"
 )
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true // Allow all origins for development
+	},
+}
 
 type Handler struct {
 	*http.ServeMux
 	db        *db.DB
 	orch      *orchestrator.Orchestrator
 	scheduler *orchestrator.Scheduler
+	notifier  *notify.Manager
 
+	// SSE clients
 	clientsMu sync.Mutex
 	clients   map[chan any]bool
+
+	// WebSocket clients
+	wsClientsMu sync.RWMutex
+	wsClients   map[*websocket.Conn]bool
 }
 
-func NewHandler(d *db.DB, orch *orchestrator.Orchestrator, scheduler *orchestrator.Scheduler) *Handler {
+func NewHandler(d *db.DB, orch *orchestrator.Orchestrator, scheduler *orchestrator.Scheduler, notifier *notify.Manager) *Handler {
 	h := &Handler{
 		ServeMux:  http.NewServeMux(),
 		db:        d,
 		orch:      orch,
 		scheduler: scheduler,
+		notifier:  notifier,
 		clients:   make(map[chan any]bool),
+		wsClients: make(map[*websocket.Conn]bool),
 	}
 	h.routes()
 	return h
@@ -48,14 +65,46 @@ func (h *Handler) BroadcastStatus(msg string) {
 	})
 }
 
-func (h *Handler) broadcast(event any) {
-	h.clientsMu.Lock()
-	defer h.clientsMu.Unlock()
+func (h *Handler) BroadcastScheduleInfo(info []orchestrator.ScheduleInfo) {
+	h.broadcast(map[string]any{
+		"type": "schedule",
+		"data": info,
+	})
+}
 
+func (h *Handler) BroadcastQueueStatus(status orchestrator.QueueStatus) {
+	h.broadcast(map[string]any{
+		"type": "queue",
+		"data": status,
+	})
+}
+
+func (h *Handler) broadcast(event any) {
+	// Broadcast to SSE clients
+	h.clientsMu.Lock()
 	for clientChan := range h.clients {
 		select {
 		case clientChan <- event:
 		default:
+		}
+	}
+	h.clientsMu.Unlock()
+
+	// Broadcast to WebSocket clients
+	h.wsClientsMu.RLock()
+	defer h.wsClientsMu.RUnlock()
+
+	data, err := json.Marshal(event)
+	if err != nil {
+		return
+	}
+
+	for conn := range h.wsClients {
+		err := conn.WriteMessage(websocket.TextMessage, data)
+		if err != nil {
+			log.Printf("WebSocket write error: %v", err)
+			// Don't remove here to avoid modifying map during iteration
+			// Client will be removed when the read loop detects the error
 		}
 	}
 }
@@ -85,9 +134,15 @@ func (h *Handler) routes() {
 				return
 			}
 			// Reload scheduler
-		h.scheduler.Reload()
-		w.WriteHeader(http.StatusOK)
+			h.scheduler.Reload()
+			w.WriteHeader(http.StatusOK)
 		}
+	})
+
+	h.HandleFunc("/schedule-status", func(w http.ResponseWriter, r *http.Request) {
+		info := h.scheduler.GetScheduleInfo()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(info)
 	})
 
 	h.HandleFunc("/history", func(w http.ResponseWriter, r *http.Request) {
@@ -198,6 +253,167 @@ func (h *Handler) routes() {
 				}
 				fmt.Fprintf(w, "data: %s\n\n", data)
 				flusher.Flush()
+			}
+		}
+	})
+
+	h.HandleFunc("POST /test/ping/all", func(w http.ResponseWriter, r *http.Request) {
+		go h.scheduler.RunAllPings()
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"status": "initiated"}`))
+	})
+
+	h.HandleFunc("POST /test/speed/all", func(w http.ResponseWriter, r *http.Request) {
+		go h.scheduler.RunAllSpeeds()
+		w.WriteHeader(http.StatusAccepted)
+		_, _ = w.Write([]byte(`{"status": "initiated"}`))
+	})
+
+	// Queue status endpoint
+	h.HandleFunc("/queue-status", func(w http.ResponseWriter, r *http.Request) {
+		status := h.scheduler.GetQueueStatus()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(status)
+	})
+
+	// Notification settings endpoints
+	h.HandleFunc("/notification-settings", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "GET":
+			if h.notifier == nil {
+				http.Error(w, "Notifications not configured", 503)
+				return
+			}
+			settings := h.notifier.GetSettings()
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(settings)
+		case "PUT":
+			if h.notifier == nil {
+				http.Error(w, "Notifications not configured", 503)
+				return
+			}
+			var settings notify.NotificationSettings
+			if err := json.NewDecoder(r.Body).Decode(&settings); err != nil {
+				http.Error(w, err.Error(), 400)
+				return
+			}
+			if err := h.notifier.UpdateSettings(settings); err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	// Alert rules endpoints
+	h.HandleFunc("/alert-rules", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case "GET":
+			rules, err := h.db.GetAlertRules()
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(rules)
+		case "POST":
+			var rule db.AlertRule
+			if err := json.NewDecoder(r.Body).Decode(&rule); err != nil {
+				http.Error(w, err.Error(), 400)
+				return
+			}
+			id, err := h.db.CreateAlertRule(rule)
+			if err != nil {
+				http.Error(w, err.Error(), 500)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]int64{"id": id})
+		default:
+			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		}
+	})
+
+	h.HandleFunc("DELETE /alert-rules/{id}", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+
+		if err := h.db.DeleteAlertRule(id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
+
+	h.HandleFunc("PUT /alert-rules/{id}", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+
+		var rule db.AlertRule
+		if err := json.NewDecoder(r.Body).Decode(&rule); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		rule.ID = id
+
+		if err := h.db.UpdateAlertRule(rule); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// WebSocket endpoint for real-time updates
+	h.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			log.Printf("WebSocket upgrade error: %v", err)
+			return
+		}
+
+		// Register client
+		h.wsClientsMu.Lock()
+		h.wsClients[conn] = true
+		h.wsClientsMu.Unlock()
+
+		log.Printf("WebSocket client connected. Total: %d", len(h.wsClients))
+
+		// Send initial schedule status
+		info := h.scheduler.GetScheduleInfo()
+		initialMsg, _ := json.Marshal(map[string]any{
+			"type": "schedule",
+			"data": info,
+		})
+		_ = conn.WriteMessage(websocket.TextMessage, initialMsg)
+
+		// Cleanup on disconnect
+		defer func() {
+			h.wsClientsMu.Lock()
+			delete(h.wsClients, conn)
+			h.wsClientsMu.Unlock()
+			_ = conn.Close()
+			log.Printf("WebSocket client disconnected. Total: %d", len(h.wsClients))
+		}()
+
+		// Read loop to detect disconnects and handle pings
+		for {
+			_, _, err := conn.ReadMessage()
+			if err != nil {
+				if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+					log.Printf("WebSocket error: %v", err)
+				}
+				break
 			}
 		}
 	})
