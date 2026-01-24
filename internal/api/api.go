@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gorilla/websocket"
+
 	"github.com/user/homelab-speedtest/internal/db"
 	"github.com/user/homelab-speedtest/internal/notify"
 	"github.com/user/homelab-speedtest/internal/orchestrator"
@@ -244,14 +245,14 @@ func (h *Handler) routes() {
 			case <-r.Context().Done():
 				return
 			case <-ticker.C:
-				fmt.Fprintf(w, ": keep-alive\n\n")
+				_, _ = fmt.Fprintf(w, ": keep-alive\n\n")
 				flusher.Flush()
 			case event := <-clientChan:
 				data, err := json.Marshal(event)
 				if err != nil {
 					continue
 				}
-				fmt.Fprintf(w, "data: %s\n\n", data)
+				_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
 				flusher.Flush()
 			}
 		}
@@ -281,7 +282,7 @@ func (h *Handler) routes() {
 		switch r.Method {
 		case "GET":
 			if h.notifier == nil {
-				http.Error(w, "Notifications not configured", 503)
+				http.Error(w, "Notifications not configured", http.StatusServiceUnavailable)
 				return
 			}
 			settings := h.notifier.GetSettings()
@@ -289,7 +290,7 @@ func (h *Handler) routes() {
 			_ = json.NewEncoder(w).Encode(settings)
 		case "PUT":
 			if h.notifier == nil {
-				http.Error(w, "Notifications not configured", 503)
+				http.Error(w, "Notifications not configured", http.StatusServiceUnavailable)
 				return
 			}
 			var settings notify.NotificationSettings

@@ -135,5 +135,5 @@ func runPing(target string, resp *orchestrator.WorkerResponse) {
 func printJson(v interface{}) {
 	data, _ := json.Marshal(v)
 	fmt.Println(string(data))
-	os.Stdout.Sync()
+	_ = os.Stdout.Sync()
 }

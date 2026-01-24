@@ -32,18 +32,7 @@ type Scheduler struct {
 	speedEnabled  bool
 	nextPingRun   time.Time
 	nextSpeedRun  time.Time
-	scheduleMu    lockedMutex
 }
-
-// lockedMutex is a simple mutex wrapper for schedule tracking
-type lockedMutex struct {
-	locked bool
-}
-
-func (m *lockedMutex) RLock()   {}
-func (m *lockedMutex) RUnlock() {}
-func (m *lockedMutex) Lock()    {}
-func (m *lockedMutex) Unlock()  {}
 
 func NewScheduler(d *db.DB, orch *Orchestrator) *Scheduler {
 	s := &Scheduler{

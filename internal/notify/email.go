@@ -69,25 +69,25 @@ func (e *EmailService) Send(to []string, subject, body string) error {
 
 	// Try STARTTLS
 	if ok, _ := conn.Extension("STARTTLS"); ok {
-		if err := conn.StartTLS(tlsConfig); err != nil {
-			return fmt.Errorf("failed to start TLS: %w", err)
+		if tlsErr := conn.StartTLS(tlsConfig); tlsErr != nil {
+			return fmt.Errorf("failed to start TLS: %w", tlsErr)
 		}
 	}
 
 	// Authenticate
-	if err := conn.Auth(auth); err != nil {
-		return fmt.Errorf("failed to authenticate: %w", err)
+	if authErr := conn.Auth(auth); authErr != nil {
+		return fmt.Errorf("failed to authenticate: %w", authErr)
 	}
 
 	// Set sender
-	if err := conn.Mail(e.Config.From); err != nil {
-		return fmt.Errorf("failed to set sender: %w", err)
+	if mailErr := conn.Mail(e.Config.From); mailErr != nil {
+		return fmt.Errorf("failed to set sender: %w", mailErr)
 	}
 
 	// Set recipients
 	for _, addr := range to {
-		if err := conn.Rcpt(strings.TrimSpace(addr)); err != nil {
-			return fmt.Errorf("failed to set recipient %s: %w", addr, err)
+		if rcptErr := conn.Rcpt(strings.TrimSpace(addr)); rcptErr != nil {
+			return fmt.Errorf("failed to set recipient %s: %w", addr, rcptErr)
 		}
 	}
 
