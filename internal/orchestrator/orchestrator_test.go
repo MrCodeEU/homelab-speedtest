@@ -5,12 +5,25 @@ import (
 )
 
 func TestNewOrchestrator(t *testing.T) {
-	orch := NewOrchestrator("/tmp/worker")
+	orch := NewOrchestrator("/tmp/worker", 8090)
 	if orch == nil {
 		t.Fatal("NewOrchestrator returned nil")
 	}
 	if orch.WorkerBinaryPath != "/tmp/worker" {
 		t.Errorf("Expected WorkerBinaryPath '/tmp/worker', got '%s'", orch.WorkerBinaryPath)
+	}
+	if orch.WorkerPort != 8090 {
+		t.Errorf("Expected WorkerPort 8090, got %d", orch.WorkerPort)
+	}
+}
+
+func TestNewOrchestratorDefaultPort(t *testing.T) {
+	orch := NewOrchestrator("/tmp/worker", 0)
+	if orch == nil {
+		t.Fatal("NewOrchestrator returned nil")
+	}
+	if orch.WorkerPort != 8090 {
+		t.Errorf("Expected default WorkerPort 8090 when 0 is passed, got %d", orch.WorkerPort)
 	}
 }
 

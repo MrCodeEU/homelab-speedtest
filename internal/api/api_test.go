@@ -22,7 +22,7 @@ func TestGetLatestResultsAPI(t *testing.T) {
 	database, _ := db.New(config.DatabaseConfig{Path: dbPath})
 	defer func() { _ = database.Close() }()
 
-	orch := orchestrator.NewOrchestrator("./worker")
+	orch := orchestrator.NewOrchestrator("./worker", 8090)
 	scheduler := orchestrator.NewScheduler(database, orch)
 	notifier := notify.NewManager(database)
 	handler := NewHandler(database, orch, scheduler, notifier)
