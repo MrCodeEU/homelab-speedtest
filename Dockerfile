@@ -2,10 +2,10 @@
 FROM node:20-alpine AS ui-builder
 WORKDIR /app/ui
 COPY ui/package*.json ui/svelte.config.js ui/vite.config.js ./
-RUN npm ci
+RUN npm ci && chmod -R +x node_modules/.bin/
 COPY ui/ .
 # Build SvelteKit app. output usually to build/
-RUN npm run build 
+RUN npm run build
 # Note: output directory depends on adapter. 'adapter-static' -> build/, 'adapter-node' -> build/. 
 # We used 'minimal' template. Does it have an adapter?
 # We probably need to install adapter-node or adapter-static.
