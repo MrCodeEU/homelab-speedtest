@@ -119,17 +119,18 @@
 
     async function load() {
         try {
-            const [d, r, s, h, q] = await Promise.all([
+            const [d, r, s, hPing, hSpeed, q] = await Promise.all([
                 getDevices(),
                 getResults(),
                 getScheduleStatus(),
-                getHistory(500),
+                getHistory(500, 'ping'),
+                getHistory(500, 'speed'),
                 getQueueStatus().catch(() => null)
             ]);
             devices = d || [];
             results = r || [];
             scheduleStatus = s || [];
-            history = h || [];
+            history = [...(hPing || []), ...(hSpeed || [])];
             queueStatus = q;
             error = null;
             updateCountdowns();

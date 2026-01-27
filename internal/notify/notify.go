@@ -55,7 +55,9 @@ func (n *NtfyService) SendToTopic(topic, title, message, priority string) error 
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("ntfy returned status: %d", resp.StatusCode)
+		buf := new(bytes.Buffer)
+		_, _ = buf.ReadFrom(resp.Body)
+		return fmt.Errorf("ntfy returned status: %d, body: %s", resp.StatusCode, buf.String())
 	}
 
 	return nil

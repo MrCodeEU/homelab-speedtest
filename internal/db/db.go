@@ -75,6 +75,22 @@ func (d *DB) AddDevice(dev Device) error {
 	return err
 }
 
+func (d *DB) UpdateDevice(dev Device) error {
+	res, err := d.Exec("UPDATE devices SET name = ?, hostname = ?, ip = ?, ssh_user = ?, ssh_port = ? WHERE id = ?",
+		dev.Name, dev.Hostname, dev.IP, dev.SSHUser, dev.SSHPort, dev.ID)
+	if err != nil {
+		return err
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if rows == 0 {
+		return fmt.Errorf("device with id %d not found", dev.ID)
+	}
+	return nil
+}
+
 func (d *DB) DeleteDevice(id int) error {
 	_, err := d.Exec("DELETE FROM devices WHERE id = ?", id)
 	return err
@@ -134,7 +150,7 @@ func (d *DB) UpdateSchedule(type_ string, cron string, enabled bool) error {
 	return err
 }
 
-func (d *DB) GetHistory(limit int) ([]Result, error) {
+func (d *DB) GetHistory(limit int, typeFilter string) ([]Result, error) {
 	query := `
 		SELECT 
 			source_device_id, 
@@ -145,10 +161,11 @@ func (d *DB) GetHistory(limit int) ([]Result, error) {
 			timestamp,
 			IFNULL(error, '')
 		FROM results 
+		WHERE (? = '' OR type = ?)
 		ORDER BY timestamp DESC 
 		LIMIT ?
 	`
-	rows, err := d.Query(query, limit)
+	rows, err := d.Query(query, typeFilter, typeFilter, limit)
 	if err != nil {
 		return nil, err
 	}

@@ -55,6 +55,19 @@ export async function addDevice(device) {
 }
 
 /**
+ * Update a device
+ * @param {Device} device
+ */
+export async function updateDevice(device) {
+    const res = await fetch(`${API_BASE}/devices/${device.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(device),
+    });
+    if (!res.ok) throw new Error('Failed to update device');
+}
+
+/**
  * Delete a device
  * @param {number} id
  */
@@ -101,15 +114,16 @@ export async function updateSchedule(type, cron, enabled) {
 /**
  * Fetch history
  * @param {number} [limit]
+ * @param {string} [type]
  * @returns {Promise<Result[]>}
  */
-/**
- * Fetch history
- * @param {number} [limit]
- * @returns {Promise<Result[]>}
- */
-export async function getHistory(limit = 100) {
-    const res = await fetch(`${API_BASE}/history?limit=${limit}`);
+export async function getHistory(limit = 100, type = '') {
+    const url = new URL(`${window.location.origin}${API_BASE}/history`);
+    url.searchParams.append('limit', limit.toString());
+    if (type) {
+        url.searchParams.append('type', type);
+    }
+    const res = await fetch(url.toString());
     if (!res.ok) throw new Error('Failed to fetch history');
     return res.json();
 }
@@ -193,6 +207,7 @@ export async function getQueueStatus() {
  * @property {string} user
  * @property {string} password
  * @property {string} from
+ * @property {boolean} skip_ssl_verify
  */
 
 /**
@@ -237,6 +252,39 @@ export async function updateNotificationSettings(settings) {
         body: JSON.stringify(settings),
     });
     if (!res.ok) throw new Error('Failed to update notification settings');
+}
+
+/**
+ * Test ntfy notification
+ * @param {NtfySettings} [settings]
+ */
+export async function testNtfy(settings) {
+    const res = await fetch(`${API_BASE}/notify/test/ntfy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: settings ? JSON.stringify(settings) : undefined,
+    });
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || 'Failed to send test ntfy notification');
+    }
+}
+
+/**
+ * Test email notification
+ * @param {string} recipients
+ * @param {SMTPSettings} [settings]
+ */
+export async function testEmail(recipients, settings) {
+    const res = await fetch(`${API_BASE}/notify/test/email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ recipients, settings }),
+    });
+    if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || 'Failed to send test email');
+    }
 }
 
 // Alert Rules

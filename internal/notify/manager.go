@@ -21,16 +21,17 @@ const (
 
 // EnvConfigStatus indicates which settings are configured via environment variables
 type EnvConfigStatus struct {
-	NtfyEnabled  bool `json:"ntfy_enabled"`
-	NtfyServer   bool `json:"ntfy_server"`
-	NtfyTopic    bool `json:"ntfy_topic"`
-	NtfyToken    bool `json:"ntfy_token"`
-	SMTPEnabled  bool `json:"smtp_enabled"`
-	SMTPHost     bool `json:"smtp_host"`
-	SMTPPort     bool `json:"smtp_port"`
-	SMTPUser     bool `json:"smtp_user"`
-	SMTPPassword bool `json:"smtp_password"`
-	SMTPFrom     bool `json:"smtp_from"`
+	NtfyEnabled       bool `json:"ntfy_enabled"`
+	NtfyServer        bool `json:"ntfy_server"`
+	NtfyTopic         bool `json:"ntfy_topic"`
+	NtfyToken         bool `json:"ntfy_token"`
+	SMTPEnabled       bool `json:"smtp_enabled"`
+	SMTPHost          bool `json:"smtp_host"`
+	SMTPPort          bool `json:"smtp_port"`
+	SMTPUser          bool `json:"smtp_user"`
+	SMTPPassword      bool `json:"smtp_password"`
+	SMTPFrom          bool `json:"smtp_from"`
+	SMTPSkipSSLVerify bool `json:"smtp_skip_ssl_verify"`
 }
 
 // NotificationSettings represents all notification configuration
@@ -50,12 +51,13 @@ type NtfySettings struct {
 
 // SMTPSettings for SMTP configuration
 type SMTPSettings struct {
-	Enabled  bool   `json:"enabled"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	User     string `json:"user"`
-	Password string `json:"password"`
-	From     string `json:"from"`
+	Enabled       bool   `json:"enabled"`
+	Host          string `json:"host"`
+	Port          int    `json:"port"`
+	User          string `json:"user"`
+	Password      string `json:"password"`
+	From          string `json:"from"`
+	SkipSSLVerify bool   `json:"skip_ssl_verify"`
 }
 
 // Manager orchestrates notifications based on alert rules
@@ -135,6 +137,10 @@ func (m *Manager) loadEnvConfig() {
 		m.smtpConfig.From = v
 		m.envConfig.SMTPFrom = true
 	}
+	if v := os.Getenv("SMTP_SKIP_SSL_VERIFY"); v != "" {
+		m.smtpConfig.SkipSSLVerify = v == "true" || v == "1"
+		m.envConfig.SMTPSkipSSLVerify = true
+	}
 
 	// Load DB settings for any not set via env
 	m.loadDBSettings()
@@ -203,6 +209,11 @@ func (m *Manager) loadDBSettings() {
 			m.smtpConfig.From = v
 		}
 	}
+	if !m.envConfig.SMTPSkipSSLVerify {
+		if v, ok := settings["smtp_skip_ssl_verify"]; ok {
+			m.smtpConfig.SkipSSLVerify = v == "true" || v == "1"
+		}
+	}
 
 	// Reinitialize services with updated config
 	m.ntfy = New(m.ntfyConfig)
@@ -219,12 +230,13 @@ func (m *Manager) GetSettings() NotificationSettings {
 			Token:   m.ntfyConfig.Token,
 		},
 		SMTP: SMTPSettings{
-			Enabled:  m.smtpConfig.Enabled,
-			Host:     m.smtpConfig.Host,
-			Port:     m.smtpConfig.Port,
-			User:     m.smtpConfig.User,
-			Password: m.smtpConfig.Password,
-			From:     m.smtpConfig.From,
+			Enabled:       m.smtpConfig.Enabled,
+			Host:          m.smtpConfig.Host,
+			Port:          m.smtpConfig.Port,
+			User:          m.smtpConfig.User,
+			Password:      m.smtpConfig.Password,
+			From:          m.smtpConfig.From,
+			SkipSSLVerify: m.smtpConfig.SkipSSLVerify,
 		},
 		EnvConfigured: m.envConfig,
 	}
@@ -294,6 +306,12 @@ func (m *Manager) UpdateSettings(s NotificationSettings) error {
 			return err
 		}
 		m.smtpConfig.From = s.SMTP.From
+	}
+	if !m.envConfig.SMTPSkipSSLVerify {
+		if err := m.db.SetNotificationSetting("smtp_skip_ssl_verify", fmt.Sprintf("%v", s.SMTP.SkipSSLVerify)); err != nil {
+			return err
+		}
+		m.smtpConfig.SkipSSLVerify = s.SMTP.SkipSSLVerify
 	}
 
 	// Reinitialize services
@@ -412,4 +430,62 @@ func (m *Manager) sendNotification(rule db.AlertRule, title, message string) {
 // IsConfiguredFromEnv returns the env configuration status
 func (m *Manager) IsConfiguredFromEnv() EnvConfigStatus {
 	return m.envConfig
+}
+
+// TestNtfy sends a test notification via ntfy using provided config or stored config
+func (m *Manager) TestNtfy(cfg *NtfySettings) error {
+	var testConfig config.NtfyConfig
+
+	if cfg != nil {
+		// Use provided config
+		testConfig = config.NtfyConfig{
+			Enabled: cfg.Enabled,
+			Server:  cfg.Server,
+			Topic:   cfg.Topic,
+			Token:   cfg.Token,
+		}
+	} else {
+		// Use stored config
+		testConfig = m.ntfyConfig
+	}
+
+	// Force enable for test
+	testConfig.Enabled = true
+
+	if testConfig.Topic == "" {
+		return fmt.Errorf("no topic configured")
+	}
+
+	tester := New(testConfig)
+	return tester.Send("Test Notification", "This is a test notification from Homelab Speedtest.", "default")
+}
+
+// TestEmail sends a test notification via email using provided config or stored config
+func (m *Manager) TestEmail(recipients string, cfg *SMTPSettings) error {
+	var smtpConfig SMTPConfig
+
+	if cfg != nil {
+		smtpConfig = SMTPConfig{
+			Enabled:       cfg.Enabled,
+			Host:          cfg.Host,
+			Port:          cfg.Port,
+			User:          cfg.User,
+			Password:      cfg.Password,
+			From:          cfg.From,
+			SkipSSLVerify: cfg.SkipSSLVerify,
+		}
+	} else {
+		smtpConfig = m.smtpConfig
+	}
+
+	// Force enable for test
+	smtpConfig.Enabled = true
+
+	rcpts := ParseRecipients(recipients)
+	if len(rcpts) == 0 {
+		return fmt.Errorf("no recipients provided")
+	}
+
+	tester := NewEmailService(smtpConfig)
+	return tester.Send(rcpts, "Test Notification", "This is a test notification from Homelab Speedtest.")
 }

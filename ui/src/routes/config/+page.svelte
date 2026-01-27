@@ -1,6 +1,11 @@
 <script>
     import { onMount } from 'svelte';
-    import { getSchedules, updateSchedule, getDevices, addDevice, deleteDevice, getNotificationSettings, updateNotificationSettings, getAlertRules, createAlertRule, deleteAlertRule } from '$lib/api';
+    import {
+        getSchedules, updateSchedule,
+        getDevices, addDevice, updateDevice, deleteDevice,
+        getNotificationSettings, updateNotificationSettings, testNtfy, testEmail,
+        getAlertRules, createAlertRule, updateAlertRule, deleteAlertRule
+    } from '$lib/api';
 
     /** @type {import('$lib/api').Schedule[]} */
     let schedules = [];
@@ -15,6 +20,17 @@
     let error = null;
     let saving = false;
     let savingNotifications = false;
+
+    // Editing State
+    /** @type {import('$lib/api').Device|null} */
+    let editingDevice = null;
+    /** @type {import('$lib/api').AlertRule|null} */
+    let editingRule = null;
+
+    // Testing State
+    let testingNtfy = false;
+    let testingEmail = false;
+    let testRecipient = '';
 
     // Toast notification state
     /** @type {{message: string, type: 'success' | 'error', id: number}[]} */
@@ -121,6 +137,36 @@
         }
     }
 
+    async function handleTestNtfy() {
+        if (!notificationSettings) return;
+        testingNtfy = true;
+        try {
+            await testNtfy(notificationSettings.ntfy);
+            showToast('Test notification sent!', 'success');
+        } catch (e) {
+            showToast('Failed to send test: ' + (e instanceof Error ? e.message : String(e)), 'error');
+        } finally {
+            testingNtfy = false;
+        }
+    }
+
+    async function handleTestEmail() {
+        if (!notificationSettings) return;
+        if (!testRecipient) {
+            showToast('Please enter a recipient email address', 'error');
+            return;
+        }
+        testingEmail = true;
+        try {
+            await testEmail(testRecipient, notificationSettings.smtp);
+            showToast(`Test email sent to ${testRecipient}!`, 'success');
+        } catch (e) {
+            showToast('Failed to send test: ' + (e instanceof Error ? e.message : String(e)), 'error');
+        } finally {
+            testingEmail = false;
+        }
+    }
+
     async function handleAddDevice() {
         if (!newDevice.name || !newDevice.hostname || !newDevice.ssh_user) {
             showToast('Please fill in Name, Hostname, and SSH User', 'error');
@@ -137,6 +183,35 @@
     }
 
     /**
+     * @param {import('$lib/api').Device} dev
+     */
+    function handleEditDevice(dev) {
+        editingDevice = dev;
+        newDevice = { ...dev };
+    }
+
+    function handleCancelEditDevice() {
+        editingDevice = null;
+        newDevice = { name: '', hostname: '', ip: '', ssh_user: 'root', ssh_port: 22 };
+    }
+
+    async function handleUpdateDevice() {
+        if (!newDevice.name || !newDevice.hostname || !newDevice.ssh_user) {
+            showToast('Please fill in Name, Hostname, and SSH User', 'error');
+            return;
+        }
+        try {
+            // @ts-ignore
+            await updateDevice(newDevice);
+            showToast(`Device "${newDevice.name}" updated successfully!`, 'success');
+            handleCancelEditDevice();
+            await load();
+        } catch (e) {
+            showToast('Failed to update device: ' + (e instanceof Error ? e.message : String(e)), 'error');
+        }
+    }
+
+    /**
      * @param {number} id
      */
     async function handleDeleteDevice(id) {
@@ -144,6 +219,9 @@
         try {
             await deleteDevice(id);
             showToast('Device deleted successfully!', 'success');
+            if (editingDevice && editingDevice.id === id) {
+                handleCancelEditDevice();
+            }
             await load();
         } catch (e) {
             showToast('Failed to delete device: ' + (e instanceof Error ? e.message : String(e)), 'error');
@@ -158,22 +236,52 @@
         try {
             await createAlertRule(newRule);
             showToast('Alert rule created!', 'success');
-            newRule = {
-                name: '',
-                event_type: 'ping_above',
-                threshold: 100,
-                source_device_id: null,
-                target_device_id: null,
-                notify_ntfy: false,
-                ntfy_topic: '',
-                notify_email: false,
-                email_recipients: '',
-                enabled: true
-            };
-            showNewRuleForm = false;
+            handleCancelEditRule();
             await load();
         } catch (e) {
             showToast('Failed to create rule: ' + (e instanceof Error ? e.message : String(e)), 'error');
+        }
+    }
+
+    /**
+     * @param {import('$lib/api').AlertRule} rule
+     */
+    function handleEditRule(rule) {
+        editingRule = rule;
+        newRule = { ...rule };
+        showNewRuleForm = true;
+    }
+
+    function handleCancelEditRule() {
+        editingRule = null;
+        newRule = {
+            name: '',
+            event_type: 'ping_above',
+            threshold: 100,
+            source_device_id: null,
+            target_device_id: null,
+            notify_ntfy: false,
+            ntfy_topic: '',
+            notify_email: false,
+            email_recipients: '',
+            enabled: true
+        };
+        showNewRuleForm = false;
+    }
+
+    async function handleUpdateRule() {
+        if (!newRule.name) {
+            showToast('Please provide a rule name', 'error');
+            return;
+        }
+        try {
+            // @ts-ignore
+            await updateAlertRule(newRule);
+            showToast('Alert rule updated!', 'success');
+            handleCancelEditRule();
+            await load();
+        } catch (e) {
+            showToast('Failed to update rule: ' + (e instanceof Error ? e.message : String(e)), 'error');
         }
     }
 
@@ -185,6 +293,9 @@
         try {
             await deleteAlertRule(id);
             showToast('Alert rule deleted!', 'success');
+            if (editingRule && editingRule.id === id) {
+                handleCancelEditRule();
+            }
             await load();
         } catch (e) {
             showToast('Failed to delete rule: ' + (e instanceof Error ? e.message : String(e)), 'error');
@@ -340,7 +451,7 @@
                     </thead>
                     <tbody class="divide-y divide-gray-700">
                         {#each devices as dev}
-                            <tr class="hover:bg-gray-700/30 transition-colors">
+                            <tr class="hover:bg-gray-700/30 transition-colors {editingDevice?.id === dev.id ? 'bg-cyan-900/10 border-l-2 border-cyan-500' : ''}">
                                 <td class="px-6 py-4 font-semibold text-white">{dev.name}</td>
                                 <td class="px-6 py-4 font-mono text-sm text-gray-300">
                                     {dev.hostname}
@@ -352,19 +463,30 @@
                                     <span class="bg-gray-900 px-2 py-1 rounded">{dev.ssh_user}@{dev.ssh_port}</span>
                                 </td>
                                 <td class="px-6 py-4 text-right">
-                                    <button
-                                        onclick={() => handleDeleteDevice(dev.id)}
-                                        class="text-gray-500 hover:text-red-400 transition-colors p-1"
-                                        title="Delete Device"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                                        </svg>
-                                    </button>
+                                    <div class="flex justify-end gap-2">
+                                        <button
+                                            onclick={() => handleEditDevice(dev)}
+                                            class="text-gray-500 hover:text-cyan-400 transition-colors p-1"
+                                            title="Edit Device"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                              <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            onclick={() => handleDeleteDevice(dev.id)}
+                                            class="text-gray-500 hover:text-red-400 transition-colors p-1"
+                                            title="Delete Device"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         {/each}
-                        <!-- Add New Device Row -->
+                        <!-- Add/Edit Device Row -->
                         <tr class="bg-cyan-900/5">
                             <td class="px-6 py-4">
                                 <input type="text" bind:value={newDevice.name} placeholder="Device Name" class="bg-gray-900 border border-gray-700 rounded px-3 py-1.5 text-sm w-full outline-none focus:border-cyan-500"/>
@@ -380,15 +502,38 @@
                                 </div>
                             </td>
                             <td class="px-6 py-4 text-right">
-                                <button
-                                    onclick={handleAddDevice}
-                                    class="bg-cyan-600 hover:bg-cyan-500 text-white p-2 rounded-lg transition-colors shadow-lg"
-                                    title="Add Device"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-                                        <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                                    </svg>
-                                </button>
+                                <div class="flex justify-end gap-2">
+                                    {#if editingDevice}
+                                        <button
+                                            onclick={handleCancelEditDevice}
+                                            class="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-lg transition-colors shadow-lg"
+                                            title="Cancel Edit"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            onclick={handleUpdateDevice}
+                                            class="bg-green-600 hover:bg-green-500 text-white p-2 rounded-lg transition-colors shadow-lg"
+                                            title="Update Device"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="m4.5 12.75 6 6 9-13.5" />
+                                            </svg>
+                                        </button>
+                                    {:else}
+                                        <button
+                                            onclick={handleAddDevice}
+                                            class="bg-cyan-600 hover:bg-cyan-500 text-white p-2 rounded-lg transition-colors shadow-lg"
+                                            title="Add Device"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                                            </svg>
+                                        </button>
+                                    {/if}
+                                </div>
                             </td>
                         </tr>
                     </tbody>
@@ -408,14 +553,23 @@
 
                 <div class="grid gap-6 md:grid-cols-2">
                     <!-- ntfy Settings -->
-                    <div class="bg-gray-800/50 border border-gray-700 rounded-xl p-6 backdrop-blur">
-                        <div class="flex justify-between items-center mb-6">
+                    <div class="bg-gray-800/50 border border-gray-700 rounded-xl p-6 backdrop-blur relative">
+                         <div class="flex justify-between items-center mb-6">
                             <h3 class="text-lg font-semibold text-white">ntfy Push Notifications</h3>
                             {#if notificationSettings.env_configured.ntfy_enabled || notificationSettings.env_configured.ntfy_server || notificationSettings.env_configured.ntfy_topic}
                                 <span class="px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-yellow-500/20 text-yellow-400 border border-yellow-500/30">
                                     ENV CONFIGURED
                                 </span>
                             {/if}
+                        </div>
+                        <div class="absolute top-6 right-6">
+                             <button
+                                onclick={handleTestNtfy}
+                                disabled={testingNtfy}
+                                class="text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 bg-gray-700 hover:bg-gray-600 text-white rounded transition-colors disabled:opacity-50"
+                            >
+                                {testingNtfy ? 'Sending...' : 'Test ntfy'}
+                            </button>
                         </div>
 
                         <div class="space-y-4">
@@ -547,6 +701,38 @@
                                     placeholder="homelab@example.com"
                                 />
                             </div>
+
+                            <div class="flex items-center gap-3 mt-2">
+                                <label class="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        bind:checked={notificationSettings.smtp.skip_ssl_verify}
+                                        disabled={notificationSettings.env_configured.smtp_skip_ssl_verify}
+                                        class="sr-only peer"
+                                    >
+                                    <div class="w-9 h-5 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-cyan-800 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-yellow-600 peer-disabled:opacity-50"></div>
+                                    <span class="ms-3 text-xs font-medium text-gray-400">Skip SSL Verification (Insecure)</span>
+                                </label>
+                            </div>
+
+                            <div class="pt-2 border-t border-gray-700/50 mt-2">
+                                <label class="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Test Recipient</label>
+                                <div class="flex gap-2">
+                                     <input
+                                        type="text"
+                                        bind:value={testRecipient}
+                                        class="w-full bg-gray-900/50 border border-gray-700 rounded-lg px-4 py-2 text-white font-mono text-sm focus:border-cyan-500 outline-none"
+                                        placeholder="your@email.com"
+                                    />
+                                    <button
+                                        onclick={handleTestEmail}
+                                        disabled={testingEmail}
+                                        class="whitespace-nowrap px-3 py-2 bg-gray-700 hover:bg-gray-600 text-white text-xs font-bold uppercase tracking-wider rounded transition-colors disabled:opacity-50"
+                                    >
+                                        {testingEmail ? 'Sending...' : 'Send Test'}
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -584,7 +770,7 @@
             <!-- New Rule Form -->
             {#if showNewRuleForm}
                 <div class="bg-gray-800/50 border border-cyan-500/30 rounded-xl p-6 backdrop-blur">
-                    <h3 class="text-lg font-semibold text-white mb-4">New Alert Rule</h3>
+                    <h3 class="text-lg font-semibold text-white mb-4">{editingRule ? 'Edit Alert Rule' : 'New Alert Rule'}</h3>
                     <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                         <div>
                             <label class="block text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">Rule Name</label>
@@ -686,18 +872,33 @@
                     </div>
 
                     <div class="flex gap-3 mt-6">
-                        <button
-                            onclick={handleAddRule}
-                            class="bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-2.5 px-6 rounded-lg transition-all"
-                        >
-                            Create Rule
-                        </button>
-                        <button
-                            onclick={() => showNewRuleForm = false}
-                            class="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2.5 px-6 rounded-lg transition-all"
-                        >
-                            Cancel
-                        </button>
+                        {#if editingRule}
+                            <button
+                                onclick={handleUpdateRule}
+                                class="bg-green-600 hover:bg-green-500 text-white font-semibold py-2.5 px-6 rounded-lg transition-all"
+                            >
+                                Update Rule
+                            </button>
+                            <button
+                                onclick={handleCancelEditRule}
+                                class="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2.5 px-6 rounded-lg transition-all"
+                            >
+                                Cancel
+                            </button>
+                        {:else}
+                            <button
+                                onclick={handleAddRule}
+                                class="bg-cyan-600 hover:bg-cyan-500 text-white font-semibold py-2.5 px-6 rounded-lg transition-all"
+                            >
+                                Create Rule
+                            </button>
+                            <button
+                                onclick={() => showNewRuleForm = false}
+                                class="bg-gray-700 hover:bg-gray-600 text-white font-semibold py-2.5 px-6 rounded-lg transition-all"
+                            >
+                                Cancel
+                            </button>
+                        {/if}
                     </div>
                 </div>
             {/if}
@@ -717,7 +918,7 @@
                     </thead>
                     <tbody class="divide-y divide-gray-700">
                         {#each alertRules as rule}
-                            <tr class="hover:bg-gray-700/30 transition-colors">
+                            <tr class="hover:bg-gray-700/30 transition-colors {editingRule?.id === rule.id ? 'bg-cyan-900/10 border-l-2 border-cyan-500' : ''}">
                                 <td class="px-6 py-4 font-semibold text-white">{rule.name}</td>
                                 <td class="px-6 py-4 text-sm text-gray-300">
                                     {getEventTypeLabel(rule.event_type)}
@@ -744,15 +945,26 @@
                                     </span>
                                 </td>
                                 <td class="px-6 py-4 text-right">
-                                    <button
-                                        onclick={() => handleDeleteRule(rule.id)}
-                                        class="text-gray-500 hover:text-red-400 transition-colors p-1"
-                                        title="Delete Rule"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
-                                            <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
-                                        </svg>
-                                    </button>
+                                    <div class="flex justify-end gap-2">
+                                        <button
+                                            onclick={() => handleEditRule(rule)}
+                                            class="text-gray-500 hover:text-cyan-400 transition-colors p-1"
+                                            title="Edit Rule"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                              <path stroke-linecap="round" stroke-linejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L10.582 16.07a4.5 4.5 0 0 1-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 0 1 1.13-1.897l8.932-8.931Zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0 1 15.75 21H5.25A2.25 2.25 0 0 1 3 18.75V8.25A2.25 2.25 0 0 1 5.25 6H10" />
+                                            </svg>
+                                        </button>
+                                        <button
+                                            onclick={() => handleDeleteRule(rule.id)}
+                                            class="text-gray-500 hover:text-red-400 transition-colors p-1"
+                                            title="Delete Rule"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+                                                <path stroke-linecap="round" stroke-linejoin="round" d="m14.74 9-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 0 1-2.244 2.077H8.084a2.25 2.25 0 0 1-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 0 0-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 0 0-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 0 0-7.5 0" />
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </td>
                             </tr>
                         {:else}

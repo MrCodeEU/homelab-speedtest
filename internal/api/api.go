@@ -148,6 +148,7 @@ func (h *Handler) routes() {
 
 	h.HandleFunc("/history", func(w http.ResponseWriter, r *http.Request) {
 		limitStr := r.URL.Query().Get("limit")
+		typeFilter := r.URL.Query().Get("type")
 		limit := 100
 		if limitStr != "" {
 			if l, err := strconv.Atoi(limitStr); err == nil {
@@ -155,7 +156,7 @@ func (h *Handler) routes() {
 			}
 		}
 
-		history, err := h.db.GetHistory(limit)
+		history, err := h.db.GetHistory(limit, typeFilter)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -176,6 +177,55 @@ func (h *Handler) routes() {
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	})
+
+	h.HandleFunc("PUT /devices/{id}", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			log.Printf("PUT /devices/{id}: Invalid ID %s", idStr)
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+
+		var dev db.Device
+		if err := json.NewDecoder(r.Body).Decode(&dev); err != nil {
+			log.Printf("PUT /devices/%d: Body decode error: %v", id, err)
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		dev.ID = id
+
+		log.Printf("Updating device %d: %+v", id, dev)
+		if err := h.db.UpdateDevice(dev); err != nil {
+			log.Printf("PUT /devices/%d: Update error: %v", id, err)
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	// Fallback POST for device update if PUT fails
+	h.HandleFunc("POST /devices/{id}/update", func(w http.ResponseWriter, r *http.Request) {
+		idStr := r.PathValue("id")
+		id, err := strconv.Atoi(idStr)
+		if err != nil {
+			http.Error(w, "Invalid ID", http.StatusBadRequest)
+			return
+		}
+
+		var dev db.Device
+		if err := json.NewDecoder(r.Body).Decode(&dev); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		dev.ID = id
+
+		if err := h.db.UpdateDevice(dev); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
 	})
 
 	h.HandleFunc("/devices", func(w http.ResponseWriter, r *http.Request) {
@@ -306,6 +356,48 @@ func (h *Handler) routes() {
 		default:
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		}
+	})
+
+	// Test notification endpoints
+	h.HandleFunc("POST /notify/test/ntfy", func(w http.ResponseWriter, r *http.Request) {
+		if h.notifier == nil {
+			http.Error(w, "Notifications not configured", http.StatusServiceUnavailable)
+			return
+		}
+
+		var cfg *notify.NtfySettings
+		if r.ContentLength > 0 {
+			var input notify.NtfySettings
+			if err := json.NewDecoder(r.Body).Decode(&input); err == nil {
+				cfg = &input
+			}
+		}
+
+		if err := h.notifier.TestNtfy(cfg); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
+
+	h.HandleFunc("POST /notify/test/email", func(w http.ResponseWriter, r *http.Request) {
+		if h.notifier == nil {
+			http.Error(w, "Notifications not configured", http.StatusServiceUnavailable)
+			return
+		}
+		var req struct {
+			Recipients string               `json:"recipients"`
+			Settings   *notify.SMTPSettings `json:"settings"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, err.Error(), 400)
+			return
+		}
+		if err := h.notifier.TestEmail(req.Recipients, req.Settings); err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
 	})
 
 	// Alert rules endpoints

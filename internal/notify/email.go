@@ -9,12 +9,13 @@ import (
 
 // SMTPConfig holds SMTP server configuration
 type SMTPConfig struct {
-	Enabled  bool   `json:"enabled"`
-	Host     string `json:"host"`
-	Port     int    `json:"port"`
-	User     string `json:"user"`
-	Password string `json:"password"`
-	From     string `json:"from"`
+	Enabled       bool   `json:"enabled"`
+	Host          string `json:"host"`
+	Port          int    `json:"port"`
+	User          string `json:"user"`
+	Password      string `json:"password"`
+	From          string `json:"from"`
+	SkipSSLVerify bool   `json:"skip_ssl_verify"`
 }
 
 // EmailService handles sending emails via SMTP
@@ -58,7 +59,8 @@ func (e *EmailService) Send(to []string, subject, body string) error {
 
 	// Try with STARTTLS first
 	tlsConfig := &tls.Config{
-		ServerName: e.Config.Host,
+		ServerName:         e.Config.Host,
+		InsecureSkipVerify: e.Config.SkipSSLVerify,
 	}
 
 	conn, err := smtp.Dial(addr)
