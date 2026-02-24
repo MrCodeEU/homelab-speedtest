@@ -1,0 +1,9 @@
+{
+  "description": "A homelab network performance monitoring tool that measures bandwidth and latency between devices using a Go-based SSH worker, with a real-time Svelte dashboard, alert rules via ntfy, and Docker deployment.",
+  "featured": false,
+  "tags": ["golang", "svelte", "homelab", "networking", "monitoring", "docker", "devops"],
+  "images": [
+    "https://picsum.photos/seed/homelabspeed1/800/450",
+    "https://picsum.photos/seed/homelabspeed2/800/450"
+  ]
+}
